@@ -81,6 +81,8 @@ function PersonalInfoStep({ profile, setProfile, errors }: OnboardingStepProps) 
 
 function SkillsStep({ profile, setProfile, errors }: OnboardingStepProps) {
   const [skills, setSkills] = useState<Skill[]>(profile.skills || [])
+  const [pendingSkillName, setPendingSkillName] = useState('')
+  const [pendingSkillLevel, setPendingSkillLevel] = useState<Skill['level']>('intermediate')
 
   useEffect(() => {
     setProfile((prev: any) => ({ ...prev, skills }))
@@ -96,7 +98,21 @@ function SkillsStep({ profile, setProfile, errors }: OnboardingStepProps) {
       </div>
       <Card>
         <CardContent className="pt-6">
-          <SkillsManager skills={skills} onChange={setSkills} />
+          <SkillsManager
+            skills={skills}
+            onChange={setSkills}
+            pendingName={pendingSkillName}
+            pendingLevel={pendingSkillLevel}
+            onPendingNameChange={setPendingSkillName}
+            onPendingLevelChange={setPendingSkillLevel}
+            onAddPendingSkill={() => {
+              const trimmedName = pendingSkillName.trim()
+              if (!trimmedName) return
+              setSkills((prev) => [...prev, { name: trimmedName, level: pendingSkillLevel }])
+              setPendingSkillName('')
+              setPendingSkillLevel('intermediate')
+            }}
+          />
         </CardContent>
       </Card>
       {errors.skills && <p className="text-xs text-destructive">{errors.skills}</p>}

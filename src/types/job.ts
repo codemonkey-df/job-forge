@@ -103,6 +103,10 @@ export interface JobOffer {
   keyResponsibilities?: string[]  // Key responsibilities from LLM extraction
   primarySkills?: string[]   // Primary skills from LLM extraction
   analysisInsights?: AnalysisInsights
+  analysisSkillsHash?: string
+  analysisLastComputedAt?: string
+  /** User decisions on fuzzy alias matches (job skill name → confirm or reject) */
+  skillAliasOverrides?: Record<string, 'confirmed' | 'rejected'>
   generatedCV?: string
   missingSkillsReport?: string
   status: ApplicationStatus

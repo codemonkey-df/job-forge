@@ -12,6 +12,7 @@ import { skillExtractionSystem, buildSkillExtractionPrompt } from '@/lib/llm/pro
 import { matchSkills } from '@/lib/utils/skillMatcher'
 import { fetchJobDescription } from '@/lib/utils/jobParser'
 import { buildAnalysisInsights } from '@/lib/utils/analysisInsights'
+import { computeSkillsSignature } from '@/lib/utils/skillsSignature'
 import { useToast } from '@/hooks/use-toast'
 import type { JobSkill } from '@/types/job'
 
@@ -104,6 +105,8 @@ export function AnalyzeJobModal({ open, onOpenChange, onSuccess }: Props) {
           leadingKeywords.length ? leadingKeywords : undefined,
           profile?.skills ?? [],
         ),
+        analysisSkillsHash: computeSkillsSignature(profile?.skills ?? []),
+        analysisLastComputedAt: new Date().toISOString(),
         status: 'bookmarked',
         analyzedAt: new Date().toISOString(),
       })

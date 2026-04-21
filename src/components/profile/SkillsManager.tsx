@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,18 +9,22 @@ const levels: SkillLevel[] = ['basic', 'intermediate', 'advanced', 'expert']
 interface Props {
   skills: Skill[]
   onChange: (skills: Skill[]) => void
+  pendingName: string
+  pendingLevel: SkillLevel
+  onPendingNameChange: (name: string) => void
+  onPendingLevelChange: (level: SkillLevel) => void
+  onAddPendingSkill: () => void
 }
 
-export function SkillsManager({ skills, onChange }: Props) {
-  const [newName, setNewName] = useState('')
-  const [newLevel, setNewLevel] = useState<SkillLevel>('intermediate')
-
-  function addSkill() {
-    if (!newName.trim()) return
-    onChange([...skills, { name: newName.trim(), level: newLevel }])
-    setNewName('')
-    setNewLevel('intermediate')
-  }
+export function SkillsManager({
+  skills,
+  onChange,
+  pendingName,
+  pendingLevel,
+  onPendingNameChange,
+  onPendingLevelChange,
+  onAddPendingSkill,
+}: Props) {
 
   function removeSkill(index: number) {
     onChange(skills.filter((_, i) => i !== index))
@@ -66,13 +69,13 @@ export function SkillsManager({ skills, onChange }: Props) {
 
       <div className="flex items-center gap-2 pt-2 border-t">
         <Input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
+          value={pendingName}
+          onChange={(e) => onPendingNameChange(e.target.value)}
           placeholder="Add new skill..."
           className="flex-1"
-          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), onAddPendingSkill())}
         />
-        <Select value={newLevel} onValueChange={(v) => setNewLevel(v as SkillLevel)}>
+        <Select value={pendingLevel} onValueChange={(v) => onPendingLevelChange(v as SkillLevel)}>
           <SelectTrigger className="w-36">
             <SelectValue />
           </SelectTrigger>
@@ -82,7 +85,7 @@ export function SkillsManager({ skills, onChange }: Props) {
             ))}
           </SelectContent>
         </Select>
-        <Button type="button" size="icon" onClick={addSkill}>
+        <Button type="button" size="icon" onClick={onAddPendingSkill}>
           <Plus className="size-4" />
         </Button>
       </div>

@@ -20,12 +20,13 @@ import { cvGenerationSystem, buildCVGenerationPrompt } from '@/lib/llm/prompts/c
 import { missingSkillsSystem, buildMissingSkillsPrompt } from '@/lib/llm/prompts/missingSkills'
 import {
   matchSkills,
-  computeMatchPercentage,
+  computeJobProfileMatchPercentage,
   computeExcludedUserSkills,
   rankProjectsByJobRelevance,
 } from '@/lib/utils/skillMatcher'
 import { fetchJobDescription } from '@/lib/utils/jobParser'
 import { buildAnalysisInsights } from '@/lib/utils/analysisInsights'
+import { computeSkillsSignature } from '@/lib/utils/skillsSignature'
 import { computeMandatoryKeywordCoverage, evaluateATSCompliance } from '@/lib/utils/atsChecks'
 import { trackCVGeneration, trackKeywordCoverageDelta } from '@/lib/utils/telemetry'
 import { downloadCVAsPDF } from '@/lib/pdf/generator'
@@ -126,6 +127,8 @@ export default function NewJob() {
           leadingKeywords.length ? leadingKeywords : undefined,
           profile?.skills ?? [],
         ),
+        analysisSkillsHash: computeSkillsSignature(profile?.skills ?? []),
+        analysisLastComputedAt: new Date().toISOString(),
         status: 'bookmarked',
         analyzedAt: new Date().toISOString(),
       }
@@ -273,7 +276,7 @@ export default function NewJob() {
     if (text.trim()) handleJobSubmit(text.trim())
   }, [handleJobSubmit])
 
-  const matchPct = currentJob ? computeMatchPercentage([...currentJob.mandatorySkills, ...currentJob.niceToHaveSkills]) : 0
+  const matchPct = currentJob ? computeJobProfileMatchPercentage(currentJob) : 0
   const isAnalyzing = step === 'analyzing'
   const recentJobs = [...jobs].sort((a, b) => new Date(b.analyzedAt).getTime() - new Date(a.analyzedAt).getTime()).slice(0, 3)
 
@@ -332,7 +335,7 @@ export default function NewJob() {
                 ) : (
                   <div className="divide-y">
                     {recentJobs.map((j) => {
-                      const pct = computeMatchPercentage([...j.mandatorySkills, ...j.niceToHaveSkills])
+                      const pct = computeJobProfileMatchPercentage(j)
                       const dotColor = pct >= 70 ? 'bg-emerald-500' : pct >= 40 ? 'bg-amber-500' : 'bg-destructive'
                       return (
                         <button

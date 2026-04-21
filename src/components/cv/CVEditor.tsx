@@ -45,6 +45,8 @@ export function CVEditor() {
   const { profile, saveProfile } = useProfileStore()
   const { toast } = useToast()
   const [skills, setSkills] = useState<Skill[]>(profile?.skills ?? [])
+  const [pendingSkillName, setPendingSkillName] = useState('')
+  const [pendingSkillLevel, setPendingSkillLevel] = useState<Skill['level']>('intermediate')
   const [experience, setExperience] = useState<WorkExperience[]>(profile?.experience ?? [])
   const [education, setEducation] = useState<Education[]>(profile?.education ?? [])
   const [projects, setProjects] = useState<Project[]>(profile?.projects ?? [])
@@ -76,6 +78,8 @@ export function CVEditor() {
         summary: profile.summary ?? '',
       })
       setSkills(profile.skills)
+      setPendingSkillName('')
+      setPendingSkillLevel('intermediate')
       setExperience(profile.experience)
       setEducation(profile.education)
       setProjects(profile.projects)
@@ -83,10 +87,21 @@ export function CVEditor() {
     }
   }, [profile, reset])
 
+  function addPendingSkill(currentSkills: Skill[]): Skill[] {
+    const trimmedName = pendingSkillName.trim()
+    if (!trimmedName) return currentSkills
+    const nextSkills = [...currentSkills, { name: trimmedName, level: pendingSkillLevel }]
+    setPendingSkillName('')
+    setPendingSkillLevel('intermediate')
+    setSkills(nextSkills)
+    return nextSkills
+  }
+
   async function onSubmit(data: FormValues) {
+    const skillsToSave = addPendingSkill(skills)
     await saveProfile({
       ...data,
-      skills,
+      skills: skillsToSave,
       experience,
       education,
       projects,
@@ -213,7 +228,15 @@ export function CVEditor() {
         <TabsContent value="skills">
           <Card>
             <CardContent className="pt-6">
-              <SkillsManager skills={skills} onChange={setSkills} />
+              <SkillsManager
+                skills={skills}
+                onChange={setSkills}
+                pendingName={pendingSkillName}
+                pendingLevel={pendingSkillLevel}
+                onPendingNameChange={setPendingSkillName}
+                onPendingLevelChange={setPendingSkillLevel}
+                onAddPendingSkill={() => { addPendingSkill(skills) }}
+              />
             </CardContent>
           </Card>
         </TabsContent>

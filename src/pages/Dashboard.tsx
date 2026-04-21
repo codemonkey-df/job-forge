@@ -7,7 +7,7 @@ import { AnalyzeJobModal } from '@/components/job/AnalyzeJobModal'
 
 import { useJobStore } from '@/store/jobStore'
 import { useProfileStore } from '@/store/profileStore'
-import { computeMatchPercentage } from '@/lib/utils/skillMatcher'
+import { computeJobProfileMatchPercentage } from '@/lib/utils/skillMatcher'
 import { computeCVKeywordMatch } from '@/lib/utils/atsChecks'
 import { downloadCVAsPDF } from '@/lib/pdf/generator'
 import { useToast } from '@/hooks/use-toast'
@@ -124,7 +124,7 @@ export default function Dashboard() {
   const appliedCount = jobs.filter(j => ['applied', 'interviewing', 'offer'].includes(j.status)).length
   const interviewCount = jobs.filter(j => j.status === 'interviewing').length
   const avgMatch = Math.round(
-    jobs.reduce((sum, j) => sum + computeMatchPercentage([...j.mandatorySkills, ...j.niceToHaveSkills]), 0) / jobs.length
+    jobs.reduce((sum, j) => sum + computeJobProfileMatchPercentage(j), 0) / jobs.length
   )
 
   // Filtered jobs
@@ -198,7 +198,7 @@ export default function Dashboard() {
               </tr>
             ) : (
               filteredJobs.map((job) => {
-                const profileMatchPct = computeMatchPercentage([...job.mandatorySkills, ...job.niceToHaveSkills])
+                const profileMatchPct = computeJobProfileMatchPercentage(job)
                 const hasGeneratedCv = Boolean(job.generatedCV?.trim())
                 const cvAtsPct = hasGeneratedCv
                   ? computeCVKeywordMatch(job.generatedCV ?? '', {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Loader2, ArrowLeft, RefreshCw, Check, X } from 'lucide-react'
 import { FocusMode } from '@/components/cv/FocusMode'
@@ -9,16 +9,19 @@ import { streamMarkdown } from '@/lib/llm/client'
 import { cvGenerationSystem, buildCVGenerationPrompt } from '@/lib/llm/prompts/cvGeneration'
 import { missingSkillsSystem, buildMissingSkillsPrompt } from '@/lib/llm/prompts/missingSkills'
 import {
-  computeMatchPercentage,
+  applySkillAliasOverrides,
+  computeJobProfileMatchPercentage,
   computeExcludedUserSkills,
+  matchSkills,
   rankProjectsByJobRelevance,
 } from '@/lib/utils/skillMatcher'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import type { JobOffer, JobSkill } from '@/types/job'
-import { withDerivedInsights } from '@/lib/utils/analysisInsights'
+import { buildAnalysisInsights, withDerivedInsights } from '@/lib/utils/analysisInsights'
 import { evaluateATSCompliance, computeMandatoryKeywordCoverage, computeCVKeywordMatch } from '@/lib/utils/atsChecks'
 import { trackCVGeneration, trackKeywordCoverageDelta } from '@/lib/utils/telemetry'
+import { computeSkillsSignature } from '@/lib/utils/skillsSignature'
 
 function LargeMatchRing({ pct }: { pct: number }) {
   const r = 44
@@ -158,7 +161,8 @@ export default function JobAnalysis() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [focusModeOn, setFocusModeOn] = useState(false)
   const [skillInclusions, setSkillInclusions] = useState<Record<string, boolean>>({})
-  const [aliasOverrides, setAliasOverrides] = useState<Record<string, 'confirmed' | 'rejected'>>({})
+  const [isRefreshingAnalysis, setIsRefreshingAnalysis] = useState(false)
+  const refreshInFlightRef = useRef<Set<number>>(new Set())
 
   useEffect(() => {
     if (!id) return
@@ -169,25 +173,159 @@ export default function JobAnalysis() {
       setSkillInclusions(
         Object.fromEntries(found.niceToHaveSkills.map((skill) => [skill.name, skill.includeInCV !== false])),
       )
-      setAliasOverrides({})
     }
   }, [id, jobs])
+
+  useEffect(() => {
+    if (!job?.id) return
+
+    const jobId = job.id
+    const currentSkills = profile?.skills ?? []
+    const currentSkillsHash = computeSkillsSignature(currentSkills)
+    const isStale = job.analysisSkillsHash !== currentSkillsHash
+    if (!isStale) return
+    if (refreshInFlightRef.current.has(jobId)) return
+
+    const reanalyzeJob = async () => {
+      refreshInFlightRef.current.add(jobId)
+      setIsRefreshingAnalysis(true)
+      try {
+        const allExtracted = [
+          ...job.mandatorySkills.map((skill) => ({
+            name: skill.name,
+            mandatory: true,
+            priority: skill.priority,
+            context: skill.context,
+          })),
+          ...job.niceToHaveSkills.map((skill) => ({
+            name: skill.name,
+            mandatory: false,
+            priority: skill.priority,
+            context: skill.context,
+          })),
+        ]
+
+        const rematched = matchSkills(allExtracted, currentSkills)
+        const mandatoryRaw = rematched.filter((skill) => skill.mandatory)
+        const niceToHaveRaw = rematched.filter((skill) => !skill.mandatory)
+        const overrides = job.skillAliasOverrides ?? {}
+        const mandatoryForInsights = applySkillAliasOverrides(mandatoryRaw, overrides)
+        const niceForInsights = applySkillAliasOverrides(niceToHaveRaw, overrides)
+        const leadingKeywords = job.analysisInsights?.leadingKeywords?.map((item) => ({
+          keyword: item.keyword,
+          source: item.source === 'description' ? undefined : item.source,
+          importance: item.importance,
+        }))
+
+        const nextInsights = buildAnalysisInsights(
+          {
+            mandatorySkills: mandatoryForInsights,
+            niceToHaveSkills: niceForInsights,
+            rawDescription: job.rawDescription,
+            keyResponsibilities: job.keyResponsibilities,
+          },
+          leadingKeywords,
+          currentSkills,
+        )
+
+        const now = new Date().toISOString()
+        const updates: Partial<JobOffer> = {
+          mandatorySkills: mandatoryRaw,
+          niceToHaveSkills: niceToHaveRaw,
+          analysisInsights: nextInsights,
+          analysisSkillsHash: currentSkillsHash,
+          analysisLastComputedAt: now,
+          skillAliasOverrides: job.skillAliasOverrides,
+        }
+
+        await updateJob(jobId, updates)
+        setJob((prev) => (prev ? withDerivedInsights({ ...prev, ...updates }) : prev))
+        setSkillInclusions((prev) => {
+          const next = { ...prev }
+          for (const skill of niceToHaveRaw) {
+            if (!(skill.name in next)) {
+              next[skill.name] = skill.includeInCV !== false
+            }
+          }
+          return next
+        })
+      } catch (err) {
+        toast({
+          title: 'Analysis refresh failed',
+          description: err instanceof Error ? err.message : 'Could not refresh skill matching.',
+          variant: 'destructive',
+        })
+      } finally {
+        refreshInFlightRef.current.delete(jobId)
+        setIsRefreshingAnalysis(false)
+      }
+    }
+
+    void reanalyzeJob()
+  }, [job, profile?.skills, toast, updateJob])
+
+  const effectiveMandatory = useMemo(() => {
+    if (!job) return [] as JobSkill[]
+    return applySkillAliasOverrides(job.mandatorySkills, job.skillAliasOverrides)
+  }, [job])
+
+  const effectiveNiceAll = useMemo(() => {
+    if (!job) return [] as JobSkill[]
+    return applySkillAliasOverrides(job.niceToHaveSkills, job.skillAliasOverrides)
+  }, [job])
+
+  const selectedNiceToHave = useMemo(
+    () =>
+      effectiveNiceAll.filter((skill) => {
+        const override = skillInclusions[skill.name]
+        return override !== undefined ? override : skill.includeInCV !== false
+      }),
+    [effectiveNiceAll, skillInclusions],
+  )
+
+  async function persistAliasDecision(skillName: string, decision: 'confirmed' | 'rejected') {
+    if (!job?.id) return
+    const nextOverrides: Record<string, 'confirmed' | 'rejected'> = {
+      ...(job.skillAliasOverrides ?? {}),
+      [skillName]: decision,
+    }
+    const mandatory = applySkillAliasOverrides(job.mandatorySkills, nextOverrides)
+    const niceToHave = applySkillAliasOverrides(job.niceToHaveSkills, nextOverrides)
+    const leadingKeywords = job.analysisInsights?.leadingKeywords?.map((item) => ({
+      keyword: item.keyword,
+      source: item.source === 'description' ? undefined : item.source,
+      importance: item.importance,
+    }))
+    const nextInsights = buildAnalysisInsights(
+      {
+        mandatorySkills: mandatory,
+        niceToHaveSkills: niceToHave,
+        rawDescription: job.rawDescription,
+        keyResponsibilities: job.keyResponsibilities,
+      },
+      leadingKeywords,
+      profile?.skills ?? [],
+    )
+    await updateJob(job.id, {
+      skillAliasOverrides: nextOverrides,
+      analysisInsights: nextInsights,
+    })
+    setJob((prev) =>
+      prev
+        ? withDerivedInsights({
+            ...prev,
+            skillAliasOverrides: nextOverrides,
+            analysisInsights: nextInsights,
+          })
+        : null,
+    )
+  }
 
   async function handleRegenerate() {
     if (!job || !profile) return
     setIsGenerating(true)
     setCvMarkdown('')
 
-    const selectedNiceToHave = job.niceToHaveSkills.filter((s) => {
-      const override = skillInclusions[s.name]
-      return override !== undefined ? override : s.includeInCV !== false
-    })
-    const effectiveMandatory = job.mandatorySkills.map((s) => {
-      if (s.aliasedFrom && aliasOverrides[s.name] === 'rejected') {
-        return { ...s, userHasSkill: false }
-      }
-      return s
-    })
     const missingSkills = effectiveMandatory
       .filter((s) => !s.userHasSkill)
       .map((s) => ({ name: s.name, priority: s.priority }))
@@ -267,29 +405,7 @@ export default function JobAnalysis() {
     }
   }
 
-  const effectiveMandatory = useMemo(
-    () => {
-      if (!job) return [] as JobSkill[]
-      return job.mandatorySkills.map((skill) => {
-        if (skill.aliasedFrom && aliasOverrides[skill.name] === 'rejected') {
-          return { ...skill, userHasSkill: false }
-        }
-        return skill
-      })
-    },
-    [job, aliasOverrides],
-  )
-  const selectedNiceToHave = useMemo(
-    () => {
-      if (!job) return [] as JobSkill[]
-      return job.niceToHaveSkills.filter((skill) => {
-        const override = skillInclusions[skill.name]
-        return override !== undefined ? override : skill.includeInCV !== false
-      })
-    },
-    [job, skillInclusions],
-  )
-  const matchPct = computeMatchPercentage([...effectiveMandatory, ...selectedNiceToHave])
+  const matchPct = job ? computeJobProfileMatchPercentage(job) : 0
   const cvKeywordMatchPct = job
     ? computeCVKeywordMatch(cvMarkdown, {
       mandatorySkills: effectiveMandatory,
@@ -336,10 +452,10 @@ export default function JobAnalysis() {
             size="sm"
             className="gap-1.5"
             onClick={handleRegenerate}
-            disabled={isGenerating || !profile}
+            disabled={isGenerating || isRefreshingAnalysis || !profile}
           >
-            {isGenerating ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            {isGenerating ? 'Generating...' : cvMarkdown ? 'Regenerate CV' : 'Generate CV'}
+            {(isGenerating || isRefreshingAnalysis) ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {isRefreshingAnalysis ? 'Refreshing analysis...' : isGenerating ? 'Generating...' : cvMarkdown ? 'Regenerate CV' : 'Generate CV'}
           </Button>
         </div>
       </div>
@@ -445,7 +561,7 @@ export default function JobAnalysis() {
               <p className="text-sm font-semibold">Required Skills (Profile Match)</p>
               <div className="space-y-2">
                 {effectiveMandatory.map((skill) => {
-                  const aliasDecision = aliasOverrides[skill.name]
+                  const aliasDecision = job.skillAliasOverrides?.[skill.name]
                   const showAliasWarning = skill.aliasedFrom && !aliasDecision
                   const isMatched = skill.userHasSkill
                   return (
@@ -484,7 +600,7 @@ export default function JobAnalysis() {
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs gap-1"
-                              onClick={() => setAliasOverrides((prev) => ({ ...prev, [skill.name]: 'confirmed' }))}
+                              onClick={() => void persistAliasDecision(skill.name, 'confirmed')}
                             >
                               <Check className="size-3.5" />
                               Confirm
@@ -494,7 +610,7 @@ export default function JobAnalysis() {
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs gap-1"
-                              onClick={() => setAliasOverrides((prev) => ({ ...prev, [skill.name]: 'rejected' }))}
+                              onClick={() => void persistAliasDecision(skill.name, 'rejected')}
                             >
                               <X className="size-3.5" />
                               Reject

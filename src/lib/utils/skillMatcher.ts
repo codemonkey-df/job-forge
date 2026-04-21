@@ -1,4 +1,4 @@
-import type { JobSkill } from '../../types/job'
+import type { JobOffer, JobSkill } from '../../types/job'
 import type { Project, Skill } from '../../types/profile'
 import type { SkillPriority } from '@/lib/llm/schemas'
 
@@ -51,6 +51,23 @@ export function matchSkills(
       aliasedFrom: !exactMatch && fuzzyMatch ? fuzzyMatch.name : undefined,
       transferableScore,
     }
+  })
+}
+
+/**
+ * Applies persisted alias confirm/reject decisions to matched skills.
+ * Rejecting clears the fuzzy match so the job skill shows as missing without prompting again.
+ */
+export function applySkillAliasOverrides(
+  skills: JobSkill[],
+  overrides: Record<string, 'confirmed' | 'rejected'> | undefined,
+): JobSkill[] {
+  if (!overrides || Object.keys(overrides).length === 0) return skills
+  return skills.map((s) => {
+    if (overrides[s.name] === 'rejected' && s.aliasedFrom) {
+      return { ...s, userHasSkill: false, aliasedFrom: undefined }
+    }
+    return s
   })
 }
 
@@ -114,6 +131,16 @@ export function computeMatchPercentage(skills: JobSkill[]): number {
   if (mandatory.length === 0) return 0
   const matched = mandatory.filter((s) => s.userHasSkill).length
   return Math.round((matched / mandatory.length) * 100)
+}
+
+/**
+ * Profile match for a stored job: mandatory matched / mandatory count.
+ * Applies {@link applySkillAliasOverrides} so Dashboard and Job Analysis stay aligned.
+ */
+export function computeJobProfileMatchPercentage(job: JobOffer): number {
+  const mandatory = applySkillAliasOverrides(job.mandatorySkills, job.skillAliasOverrides)
+  const niceToHave = applySkillAliasOverrides(job.niceToHaveSkills, job.skillAliasOverrides)
+  return computeMatchPercentage([...mandatory, ...niceToHave])
 }
 
 export interface DetailedMatchMetrics {
