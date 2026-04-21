@@ -18,13 +18,23 @@ interface AuthState {
 const KV_KEY = 'auth'
 const LEGACY_LS_KEY = 'job-forge-auth'
 
+function createUserId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).slice(2, 10)
+  return `user_${timestamp}_${random}`
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   isLoggedIn: false,
   user: null,
   isLoading: true,
   login: async (name) => {
     const user: User = {
-      id: crypto.randomUUID(),
+      id: createUserId(),
       name: name || 'User',
     }
     await kvSet(KV_KEY, user)
