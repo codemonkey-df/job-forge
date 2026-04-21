@@ -4,9 +4,10 @@ import type { JobSkill } from '@/types/job'
 interface Props {
   mandatorySkills: JobSkill[]
   niceToHaveSkills: JobSkill[]
+  onToggleNiceToHave?: (name: string) => void
 }
 
-export function SkillList({ mandatorySkills, niceToHaveSkills }: Props) {
+export function SkillList({ mandatorySkills, niceToHaveSkills, onToggleNiceToHave }: Props) {
   const mandatoryMatched = mandatorySkills.filter((s) => s.userHasSkill).length
   const niceMatched = niceToHaveSkills.filter((s) => s.userHasSkill).length
 
@@ -36,12 +37,22 @@ export function SkillList({ mandatorySkills, niceToHaveSkills }: Props) {
             {niceMatched}/{niceToHaveSkills.length} matched
           </span>
         </div>
+        {onToggleNiceToHave && niceToHaveSkills.length > 0 && (
+          <p className="text-xs text-muted-foreground mb-2">
+            Check skills to include in the generated CV.
+          </p>
+        )}
         <div className="space-y-2">
           {niceToHaveSkills.length === 0 && (
             <p className="text-sm text-muted-foreground">No bonus skills found.</p>
           )}
           {niceToHaveSkills.map((skill) => (
-            <SkillCard key={skill.name} skill={skill} />
+            <SkillCard
+              key={skill.name}
+              skill={skill}
+              checked={onToggleNiceToHave ? skill.includeInCV !== false : undefined}
+              onToggle={onToggleNiceToHave ? () => onToggleNiceToHave(skill.name) : undefined}
+            />
           ))}
         </div>
       </div>

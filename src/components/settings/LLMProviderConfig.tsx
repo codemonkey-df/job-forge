@@ -7,10 +7,10 @@ import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { useSettingsStore, persistSettings } from '@/store/settingsStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { testConnection } from '@/lib/llm/client'
+import { cn } from '@/lib/utils'
 import type { LLMProvider } from '@/types/settings'
 
 const schema = z.object({
@@ -30,12 +30,12 @@ const defaultModels: Record<LLMProvider, string> = {
   proxy: 'gemma-4e4b',
 }
 
-const providerLabels: Record<LLMProvider, string> = {
-  anthropic: 'Anthropic (Claude)',
-  google: 'Google Gemini',
-  ollama: 'Ollama (local)',
-  proxy: 'Custom Proxy',
-}
+const providerCards: { id: LLMProvider; icon: string; name: string; desc: string; recommended?: boolean; iconBg: string }[] = [
+  { id: 'anthropic', icon: '🤖', name: 'Anthropic', desc: 'Claude Sonnet / Opus', recommended: true, iconBg: 'bg-orange-500/10' },
+  { id: 'google',    icon: '🧠', name: 'Google Gemini', desc: 'Gemini 2.0 Flash', iconBg: 'bg-blue-500/10' },
+  { id: 'ollama',    icon: '🦙', name: 'Ollama', desc: 'Local open-source', iconBg: 'bg-emerald-500/10' },
+  { id: 'proxy',     icon: '⚙️', name: 'Custom Proxy', desc: 'OpenAI-compatible', iconBg: 'bg-primary/10' },
+]
 
 export function LLMProviderConfig() {
   const { llm, setLLMSettings } = useSettingsStore()
@@ -57,12 +57,9 @@ export function LLMProviderConfig() {
   const currentModel = watch('model')
   const currentBaseUrl = watch('baseUrl')
 
-  function onProviderChange(value: string) {
-    const p = value as LLMProvider
+  function onProviderChange(p: LLMProvider) {
     setValue('provider', p)
-    // Only set default model if not already configured
     if (!currentModel) setValue('model', defaultModels[p])
-    // Only set baseUrl for ollama or proxy if not already configured
     if (p === 'ollama' && !currentBaseUrl) setValue('baseUrl', 'http://localhost:11434/api')
     else if (p === 'proxy' && !currentBaseUrl) setValue('baseUrl', 'http://localhost:8080/v1')
     else if (p !== 'ollama' && p !== 'proxy') setValue('baseUrl', '')
@@ -76,7 +73,6 @@ export function LLMProviderConfig() {
       baseUrl: data.baseUrl,
       temperature: data.temperature,
     })
-    persistSettings()  // Persist non-sensitive settings
     setTestStatus('idle')
   }
 
@@ -109,19 +105,42 @@ export function LLMProviderConfig() {
         <CardDescription>Configure your AI model provider. Non-sensitive settings are saved locally. API keys are stored in memory only.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          {/* Provider cards */}
           <div className="space-y-2">
             <Label>Provider</Label>
-            <Select value={provider} onValueChange={onProviderChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select provider" />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(providerLabels) as LLMProvider[]).map((p) => (
-                  <SelectItem key={p} value={p}>{providerLabels[p]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-2 gap-2">
+              {providerCards.map((card) => (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => onProviderChange(card.id)}
+                  className={cn(
+                    'flex items-center gap-3 p-3 rounded-lg border text-left transition-all',
+                    provider === card.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border bg-muted/30 hover:bg-muted/50 hover:border-border/80',
+                  )}
+                >
+                  <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0', card.iconBg)}>
+                    {card.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-semibold truncate">{card.name}</span>
+                      {card.recommended && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-semibold shrink-0">Best</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{card.desc}</p>
+                  </div>
+                  <div className={cn(
+                    'w-3.5 h-3.5 rounded-full border-2 shrink-0 transition-all',
+                    provider === card.id ? 'border-primary bg-primary shadow-[inset_0_0_0_2px_hsl(var(--card))]' : 'border-muted-foreground/40',
+                  )} />
+                </button>
+              ))}
+            </div>
           </div>
 
           {provider !== 'ollama' && (
@@ -150,25 +169,26 @@ export function LLMProviderConfig() {
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label>Model</Label>
-            <Input placeholder={defaultModels[provider]} {...register('model')} />
-            {errors.model && <p className="text-xs text-destructive">{errors.model.message}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Model</Label>
+              <Input placeholder={defaultModels[provider]} {...register('model')} />
+              {errors.model && <p className="text-xs text-destructive">{errors.model.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Temperature (0–2)</Label>
+              <Input type="number" step="0.1" min="0" max="2" {...register('temperature')} />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Temperature (0–2)</Label>
-            <Input type="number" step="0.1" min="0" max="2" {...register('temperature')} />
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex items-center gap-3 pt-1">
             <Button type="submit">Save Settings</Button>
             <Button type="button" variant="outline" onClick={handleTest} disabled={testStatus === 'testing'}>
               {testStatus === 'testing' && <Spinner size="sm" />}
               Test Connection
             </Button>
             {testStatus === 'ok' && (
-              <span className="flex items-center gap-1 text-sm text-green-600">
+              <span className="flex items-center gap-1 text-sm text-emerald-600">
                 <CheckCircle className="size-4" /> Connected
               </span>
             )}

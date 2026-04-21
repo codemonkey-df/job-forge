@@ -27,6 +27,8 @@ export interface Project {
   description: string
   url?: string
   technologies: string[]
+  githubUrl?: string
+  source?: 'manual' | 'github'
 }
 
 export interface UserProfile {
@@ -37,10 +39,12 @@ export interface UserProfile {
   location?: string
   linkedinUrl?: string
   portfolioUrl?: string
+  githubUsername?: string
   summary?: string
   skills: Skill[]
   experience: WorkExperience[]
   education: Education[]
   projects: Project[]
+  createdAt?: string
   updatedAt: string
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { JobOffer, ApplicationStatus } from '../types/job'
 import { listJobs, addJob as addJobToDB, updateJob as updateJobInDB, deleteJob as deleteJobFromDB } from '../lib/db/jobs'
+import { withDerivedInsights } from '@/lib/utils/analysisInsights'
 
 interface JobState {
   jobs: JobOffer[]
@@ -22,7 +23,7 @@ export const useJobStore = create<JobState>()((set, get) => ({
     set({ isLoading: true })
     try {
       const jobs = await listJobs()
-      set({ jobs })
+      set({ jobs: jobs.map(withDerivedInsights) })
     } finally {
       set({ isLoading: false })
     }

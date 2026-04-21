@@ -37,6 +37,9 @@ export function SkillsManager({ skills, onChange }: Props) {
 
   return (
     <div className="space-y-3">
+      {skills.length > 0 && (
+        <p className="text-xs text-muted-foreground">Click any skill name to rename it.</p>
+      )}
       {skills.map((skill, index) => (
         <div key={index} className="flex items-center gap-2">
           <Input

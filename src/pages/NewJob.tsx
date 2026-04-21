@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, BookOpen } from 'lucide-react'
+import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer'
 import { Spinner } from '@/components/ui/spinner'
 import { JobInput } from '@/components/job/JobInput'
+import { cn } from '@/lib/utils'
 import { SkillList } from '@/components/job/SkillList'
 import { CVPreview } from '@/components/cv/CVPreview'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,8 +18,16 @@ import { SkillExtractionResultSchema } from '@/lib/llm/schemas'
 import { skillExtractionSystem, buildSkillExtractionPrompt } from '@/lib/llm/prompts/skillExtraction'
 import { cvGenerationSystem, buildCVGenerationPrompt } from '@/lib/llm/prompts/cvGeneration'
 import { missingSkillsSystem, buildMissingSkillsPrompt } from '@/lib/llm/prompts/missingSkills'
-import { matchSkills, computeMatchPercentage } from '@/lib/utils/skillMatcher'
+import {
+  matchSkills,
+  computeMatchPercentage,
+  computeExcludedUserSkills,
+  rankProjectsByJobRelevance,
+} from '@/lib/utils/skillMatcher'
 import { fetchJobDescription } from '@/lib/utils/jobParser'
+import { buildAnalysisInsights } from '@/lib/utils/analysisInsights'
+import { computeMandatoryKeywordCoverage, evaluateATSCompliance } from '@/lib/utils/atsChecks'
+import { trackCVGeneration, trackKeywordCoverageDelta } from '@/lib/utils/telemetry'
 import { downloadCVAsPDF } from '@/lib/pdf/generator'
 import { useToast } from '@/hooks/use-toast'
 import type { JobOffer, JobSkill } from '@/types/job'
@@ -26,13 +36,14 @@ type Step = 'input' | 'analyzing' | 'results' | 'generating-cv' | 'cv-ready'
 
 export default function NewJob() {
   const navigate = useNavigate()
-  const { addJob, updateJob } = useJobStore()
+  const { jobs, addJob, updateJob, loadJobs } = useJobStore()
   const { profile } = useProfileStore()
   const { llm } = useSettingsStore()
   const { toast } = useToast()
 
   const mountedRef = useRef(true)
   useEffect(() => { return () => { mountedRef.current = false } }, [])
+  useEffect(() => { loadJobs() }, [loadJobs])
 
   const [step, setStep] = useState<Step>('input')
   const [loadingMsg, setLoadingMsg] = useState('')
@@ -41,6 +52,8 @@ export default function NewJob() {
   const [cvMarkdown, setCvMarkdown] = useState('')
   const [missingReport, setMissingReport] = useState('')
   const [isExportingPDF, setIsExportingPDF] = useState(false)
+  const [isCvWaiting, setIsCvWaiting] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   function checkSettings(): boolean {
     if (!llm.model) {
@@ -81,21 +94,38 @@ export default function NewJob() {
       setLoadingMsg('Matching against your profile…')
 
       const allExtracted = [
-        ...extraction.mandatorySkills.map((s) => ({ name: s.name, mandatory: true })),
-        ...extraction.niceToHaveSkills.map((s) => ({ name: s.name, mandatory: false })),
+        ...extraction.mandatorySkills.map((s) => ({ name: s.name, mandatory: true, priority: s.priority, context: s.context })),
+        ...extraction.niceToHaveSkills.map((s) => ({ name: s.name, mandatory: false, priority: s.priority, context: s.context })),
       ]
 
       const matchedSkills = matchSkills(allExtracted, profile?.skills ?? [])
       const mandatory: JobSkill[] = matchedSkills.filter((s) => s.mandatory)
       const niceToHave: JobSkill[] = matchedSkills.filter((s) => !s.mandatory)
+      const leadingKeywords = (extraction.leadingKeywords ?? []).filter(
+        (item): item is { keyword: string; source?: 'skill' | 'responsibility' | 'domain'; importance?: 'high' | 'medium' | 'low' } =>
+          typeof item.keyword === 'string' && item.keyword.trim().length > 0,
+      )
 
       const job: Omit<JobOffer, 'id'> = {
         companyName: extraction.companyName,
         jobTitle: extraction.jobTitle,
         originalUrl: url,
         rawDescription: description,
+        jobFocus: extraction.jobFocus,
+        keyResponsibilities: extraction.keyResponsibilities,
+        primarySkills: extraction.primarySkills,
         mandatorySkills: mandatory,
         niceToHaveSkills: niceToHave,
+        analysisInsights: buildAnalysisInsights(
+          {
+            mandatorySkills: mandatory,
+            niceToHaveSkills: niceToHave,
+            rawDescription: description,
+            keyResponsibilities: extraction.keyResponsibilities,
+          },
+          leadingKeywords.length ? leadingKeywords : undefined,
+          profile?.skills ?? [],
+        ),
         status: 'bookmarked',
         analyzedAt: new Date().toISOString(),
       }
@@ -110,6 +140,15 @@ export default function NewJob() {
     }
   }
 
+  function toggleNiceToHave(name: string) {
+    if (!currentJob) return
+    const updated = currentJob.niceToHaveSkills.map((s) =>
+      s.name === name ? { ...s, includeInCV: s.includeInCV === false ? true : false } : s,
+    )
+    setCurrentJob({ ...currentJob, niceToHaveSkills: updated })
+    if (currentJob.id) updateJob(currentJob.id, { niceToHaveSkills: updated })
+  }
+
   async function handleGenerateCV() {
     if (!currentJob || !profile) {
       toast({ title: 'Profile not found', description: 'Complete your profile before generating a CV.', variant: 'destructive' })
@@ -117,11 +156,27 @@ export default function NewJob() {
     }
     setStep('generating-cv')
     setCvMarkdown('')
+    setIsCvWaiting(true)
 
-    const missingSkillNames = [
-      ...currentJob.mandatorySkills.filter((s) => !s.userHasSkill).map((s) => s.name),
-      ...currentJob.niceToHaveSkills.filter((s) => !s.userHasSkill).map((s) => s.name),
-    ]
+    const missingSkills = currentJob.mandatorySkills
+      .filter((s) => !s.userHasSkill)
+      .map((s) => ({ name: s.name, priority: s.priority }))
+    const selectedNiceToHave = currentJob.niceToHaveSkills.filter((s) => s.includeInCV !== false)
+    const skillAliases = [
+      ...currentJob.mandatorySkills,
+      ...currentJob.niceToHaveSkills,
+    ].filter((s) => s.aliasedFrom).map((s) => ({ jobKeyword: s.name, userSkill: s.aliasedFrom! }))
+
+    const allJobSkillNames = [
+      ...currentJob.mandatorySkills,
+      ...currentJob.niceToHaveSkills,
+    ].map((s) => s.name)
+    const rankedProjectNames = rankProjectsByJobRelevance(profile.projects ?? [], allJobSkillNames).map((p) => p.name)
+    const excludedSkillNames = computeExcludedUserSkills(
+      profile.skills,
+      currentJob.mandatorySkills,
+      currentJob.niceToHaveSkills,
+    )
 
     // Generate CV and missing skills report in parallel streams
     let cvDone = false
@@ -136,28 +191,56 @@ export default function NewJob() {
       prompt: buildCVGenerationPrompt({
         jobTitle: currentJob.jobTitle,
         companyName: currentJob.companyName,
-        matchedMandatorySkills: currentJob.mandatorySkills.filter((s) => s.userHasSkill).map((s) => s.name),
-        missingMandatorySkills: currentJob.mandatorySkills.filter((s) => !s.userHasSkill).map((s) => s.name),
-        niceToHaveSkills: currentJob.niceToHaveSkills.map((s) => s.name),
+        jobFocus: currentJob.jobFocus,
+        keyResponsibilities: currentJob.keyResponsibilities,
+        primarySkills: currentJob.primarySkills,
+        leadingKeywords: currentJob.analysisInsights?.leadingKeywords
+          ?.filter((k) => k.importance !== 'low')
+          .map((k) => k.keyword)
+          .slice(0, 8),
+        matchedMandatorySkills: currentJob.mandatorySkills.filter((s) => s.userHasSkill).map((s) => ({ name: s.name, level: s.userLevel })),
+        missingMandatorySkills: missingSkills.map((s) => s.name),
+        niceToHaveSkills: selectedNiceToHave.map((s) => s.name),
+        skillAliases,
+        excludedSkills: excludedSkillNames,
+        rankedProjects: rankedProjectNames.length > 0 ? rankedProjectNames : undefined,
         profile,
       }),
-      onChunk: (chunk) => safeSetCv((prev) => prev + chunk),
+      onChunk: (chunk) => {
+        setIsCvWaiting(false)
+        safeSetCv((prev) => prev + chunk)
+      },
       onFinish: async (full) => {
         cvDone = true
+        setIsCvWaiting(false)
+        trackCVGeneration(true)
+        const compliance = evaluateATSCompliance(full, currentJob)
+        const beforeCoverage = computeMandatoryKeywordCoverage(currentJob.generatedCV ?? '', currentJob)
+        const afterCoverage = computeMandatoryKeywordCoverage(full, currentJob)
+        trackKeywordCoverageDelta(afterCoverage - beforeCoverage)
+        if (compliance.mandatoryKeywordCoverage !== 'pass') {
+          toast({
+            title: 'ATS keyword warning',
+            description: 'Some required job keywords are still missing in the generated CV.',
+            variant: 'destructive',
+          })
+        }
         if (currentJob.id) await updateJob(currentJob.id, { generatedCV: full })
         if (reportDone) safeSetStep('cv-ready')
       },
       onError: (err) => {
         cvDone = true
+        setIsCvWaiting(false)
+        trackCVGeneration(false)
         toast({ title: 'CV generation failed', description: err.message, variant: 'destructive' })
         if (reportDone) safeSetStep('cv-ready')
       },
     })
 
-    if (missingSkillNames.length > 0) {
+    if (missingSkills.length > 0) {
       streamMarkdown({
         systemPrompt: missingSkillsSystem,
-        prompt: buildMissingSkillsPrompt({ missingSkills: missingSkillNames, jobTitle: currentJob.jobTitle }),
+        prompt: buildMissingSkillsPrompt({ missingSkills, jobTitle: currentJob.jobTitle, jobFocus: currentJob.jobFocus }),
         onChunk: (chunk) => safeSetReport((prev) => prev + chunk),
         onFinish: async (full) => {
           reportDone = true
@@ -183,32 +266,97 @@ export default function NewJob() {
     }
   }
 
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const text = e.dataTransfer.getData('text/plain')
+    if (text.trim()) handleJobSubmit(text.trim())
+  }, [handleJobSubmit])
+
   const matchPct = currentJob ? computeMatchPercentage([...currentJob.mandatorySkills, ...currentJob.niceToHaveSkills]) : 0
   const isAnalyzing = step === 'analyzing'
+  const recentJobs = [...jobs].sort((a, b) => new Date(b.analyzedAt).getTime() - new Date(a.analyzedAt).getTime()).slice(0, 3)
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       {step === 'input' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Analyze a Job Offer</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!llm.model && (
-              <div className="flex items-center gap-2 p-3 mb-4 rounded-md bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-200">
-                <AlertCircle className="size-4 shrink-0" />
-                Configure your LLM provider in Settings before analyzing jobs.
+        <div className="grid grid-cols-[1fr_280px] gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Analyze a Job Offer</CardTitle>
+              <p className="text-sm text-muted-foreground">Paste a URL or drop the full job description</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!llm.model && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-200">
+                  <AlertCircle className="size-4 shrink-0" />
+                  Configure your LLM provider in Settings before analyzing jobs.
+                </div>
+              )}
+              {!profile && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-sm dark:bg-blue-950 dark:border-blue-800 dark:text-blue-200">
+                  <AlertCircle className="size-4 shrink-0" />
+                  Complete your profile for the best skill matching results.
+                </div>
+              )}
+              <JobInput onSubmit={handleJobSubmit} isLoading={isAnalyzing} />
+
+              {/* Drag-drop zone */}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                className={cn(
+                  'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
+                  isDragging
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50 bg-muted/30',
+                )}
+              >
+                <div className="text-2xl mb-2">📋</div>
+                <p className="text-sm font-medium">Drop job description here</p>
+                <p className="text-xs text-muted-foreground mt-1">Or paste directly from clipboard</p>
               </div>
-            )}
-            {!profile && (
-              <div className="flex items-center gap-2 p-3 mb-4 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-sm dark:bg-blue-950 dark:border-blue-800 dark:text-blue-200">
-                <AlertCircle className="size-4 shrink-0" />
-                Complete your profile for the best skill matching results.
-              </div>
-            )}
-            <JobInput onSubmit={handleJobSubmit} isLoading={isAnalyzing} />
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Recent analyses sidebar */}
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Recent Analyses</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {recentJobs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-4 pb-4">No analyses yet.</p>
+                ) : (
+                  <div className="divide-y">
+                    {recentJobs.map((j) => {
+                      const pct = computeMatchPercentage([...j.mandatorySkills, ...j.niceToHaveSkills])
+                      const dotColor = pct >= 70 ? 'bg-emerald-500' : pct >= 40 ? 'bg-amber-500' : 'bg-destructive'
+                      return (
+                        <button
+                          key={j.id}
+                          onClick={() => navigate(`/jobs/${j.id}`)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+                        >
+                          <span className={cn('w-2 h-2 rounded-full shrink-0', dotColor)} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{j.jobTitle}</p>
+                            <p className="text-xs text-muted-foreground truncate">{j.companyName}</p>
+                          </div>
+                          <span className="font-mono text-xs text-muted-foreground shrink-0">
+                            {new Date(j.analyzedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       )}
 
       {step === 'analyzing' && (
@@ -240,6 +388,7 @@ export default function NewJob() {
               <SkillList
                 mandatorySkills={currentJob.mandatorySkills}
                 niceToHaveSkills={currentJob.niceToHaveSkills}
+                onToggleNiceToHave={step === 'results' ? toggleNiceToHave : undefined}
               />
 
               {step === 'results' && (
@@ -255,7 +404,16 @@ export default function NewJob() {
             </CardContent>
           </Card>
 
-          {(step === 'generating-cv' || step === 'cv-ready') && (
+          {isCvWaiting && (
+            <Card>
+              <CardContent className="pt-6 pb-6 flex items-center justify-center gap-3 text-muted-foreground text-sm">
+                <Spinner size="sm" />
+                Waiting for model response...
+              </CardContent>
+            </Card>
+          )}
+
+          {(step === 'generating-cv' || step === 'cv-ready') && !isCvWaiting && (
             <CVPreview
               markdown={cvMarkdown}
               isStreaming={step === 'generating-cv'}
@@ -274,17 +432,7 @@ export default function NewJob() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div
-                  className="prose prose-sm max-w-none dark:prose-invert text-sm"
-                  dangerouslySetInnerHTML={{
-                    __html: missingReport
-                      .replace(/^## (.+)$/gm, '<h3 class="font-semibold mt-4 mb-2">$1</h3>')
-                      .replace(/^### (.+)$/gm, '<h4 class="font-medium mt-3 mb-1">$1</h4>')
-                      .replace(/^- (.+)$/gm, '<li class="ml-4">$1</li>')
-                      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                      .replace(/^(?!<[h|u|l|s])(.+)$/gm, '<p>$1</p>')
-                  }}
-                />
+                <MarkdownRenderer content={missingReport} />
               </CardContent>
             </Card>
           )}

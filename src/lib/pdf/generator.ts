@@ -1,20 +1,37 @@
-import { pdf } from '@react-pdf/renderer'
-import React from 'react'
-import { CVDocument } from './CVDocument'
 import type { UserProfile } from '@/types/profile'
+import type { CVTemplate } from './parseMarkdownCV'
+import {
+  DEFAULT_MDCRAFT_CONFIG,
+  loadMdcraftConfigFromStorage,
+  mdcraftPresetFromTemplate,
+  printMdcraftPdf,
+  type MdcraftPdfConfig,
+} from './mdcraftPdf'
 
-export async function downloadCVAsPDF(markdown: string, profile: UserProfile): Promise<void> {
-  // @react-pdf/renderer needs a React element with the Document type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const element = React.createElement(CVDocument as any, { markdown, profile })
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const blob = await pdf(element as any).toBlob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${profile.fullName.replace(/\s+/g, '_')}_CV.pdf`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+export type { MdcraftPdfConfig }
+
+export async function downloadCVAsPDF(
+  markdown: string,
+  _profile: UserProfile,
+  options: {
+    template?: CVTemplate
+    jobTitle?: string
+    companyName?: string
+    /** @deprecated Ignored; PDF uses mdcraft layout. */
+    fontScale?: number
+    /** @deprecated Ignored; PDF uses mdcraft line height. */
+    lineSpacingMultiplier?: number
+    /** Full or partial mdcraft settings from Focus Mode / UI. */
+    mdcraft?: Partial<MdcraftPdfConfig>
+  } = {}
+): Promise<void> {
+  const { template = 'modern', mdcraft: mdcraftOverrides } = options
+  const stored = await loadMdcraftConfigFromStorage()
+  const config: MdcraftPdfConfig = {
+    ...DEFAULT_MDCRAFT_CONFIG,
+    ...(stored ?? {}),
+    ...mdcraftPresetFromTemplate(template),
+    ...(mdcraftOverrides ?? {}),
+  }
+  await printMdcraftPdf(markdown, config)
 }

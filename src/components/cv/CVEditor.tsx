@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { SkillsManager } from '@/components/profile/SkillsManager'
+import { GitHubImport } from '@/components/profile/GitHubImport'
 import { ExperienceEditor } from './ExperienceEditor'
 import { useProfileStore } from '@/store/profileStore'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -37,7 +38,7 @@ function emptyEducation(): Education {
 }
 
 function emptyProject(): Project {
-  return { name: '', description: '', url: '', technologies: [] }
+  return { name: '', description: '', url: '', technologies: [], source: 'manual' }
 }
 
 export function CVEditor() {
@@ -47,6 +48,7 @@ export function CVEditor() {
   const [experience, setExperience] = useState<WorkExperience[]>(profile?.experience ?? [])
   const [education, setEducation] = useState<Education[]>(profile?.education ?? [])
   const [projects, setProjects] = useState<Project[]>(profile?.projects ?? [])
+  const [githubUsername, setGithubUsername] = useState(profile?.githubUsername ?? '')
   const [isParsing, setIsParsing] = useState(false)
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
@@ -77,11 +79,19 @@ export function CVEditor() {
       setExperience(profile.experience)
       setEducation(profile.education)
       setProjects(profile.projects)
+      setGithubUsername(profile.githubUsername ?? '')
     }
   }, [profile, reset])
 
   async function onSubmit(data: FormValues) {
-    await saveProfile({ ...data, skills, experience, education, projects })
+    await saveProfile({
+      ...data,
+      skills,
+      experience,
+      education,
+      projects,
+      githubUsername: githubUsername.trim() || undefined,
+    })
     toast({ title: 'Profile saved', variant: 'success' })
   }
 
@@ -328,6 +338,12 @@ export function CVEditor() {
                     + Add Project
                   </Button>
                 </div>
+                <GitHubImport
+                  projects={projects}
+                  onProjectsChange={setProjects}
+                  githubUsername={githubUsername}
+                  onGithubUsernameChange={setGithubUsername}
+                />
               </div>
             </CardContent>
           </Card>

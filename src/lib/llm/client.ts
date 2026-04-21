@@ -1,16 +1,65 @@
 import { generateObject, generateText, streamText } from 'ai'
-import type { ZodType } from 'zod'
+import type { z, ZodTypeAny } from 'zod'
 import { buildModel } from './providers'
 import { useSettingsStore } from '../../store/settingsStore'
 
-export async function extractStructured<T>(opts: {
+function isConnectionError(msg: string): boolean {
+  return (
+    msg.includes('Failed to fetch') ||
+    msg.includes('ERR_CONNECTION_TIMED_OUT') ||
+    msg.includes('ERR_CONNECTION_REFUSED') ||
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('ENOTFOUND') ||
+    msg.toLowerCase().includes('timeout') ||
+    msg.includes('NetworkError')
+  )
+}
+
+function toFriendlyLLMError(err: unknown): Error {
+  const message = err instanceof Error ? err.message : String(err)
+  if (!isConnectionError(message)) {
+    return err instanceof Error ? err : new Error(message)
+  }
+
+  const settings = useSettingsStore.getState().llm
+  const endpoint =
+    settings.provider === 'proxy' || settings.provider === 'ollama'
+      ? settings.baseUrl || '(base URL not configured)'
+      : settings.provider
+
+  return new Error(
+    `LLM provider unreachable (${endpoint}). Check Settings -> LLM provider and ensure the server is running. Original error: ${message}`,
+  )
+}
+
+// Extract the outermost JSON object from a text that may have surrounding noise
+function extractJsonFromText(text: string): string {
+  const start = text.indexOf('{')
+  if (start === -1) throw new Error('No JSON object found in response')
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (escape) { escape = false; continue }
+    if (ch === '\\' && inString) { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') depth++
+    if (ch === '}') { depth--; if (depth === 0) return text.slice(start, i + 1) }
+  }
+  throw new Error('Malformed JSON: unbalanced braces')
+}
+
+export async function extractStructured<Schema extends ZodTypeAny>(opts: {
   prompt: string
-  schema: ZodType<T>
+  schema: Schema
   systemPrompt?: string
-}): Promise<T> {
+}): Promise<z.output<Schema>> {
   const settings = useSettingsStore.getState().llm
   const model = buildModel(settings)
-  
+
+  // First attempt: generateObject (structured output / tool-call / JSON mode)
   try {
     const { object } = await generateObject({
       model,
@@ -18,27 +67,43 @@ export async function extractStructured<T>(opts: {
       system: opts.systemPrompt,
       prompt: opts.prompt,
       temperature: settings.temperature ?? 0.2,
-      mode: 'json', // Explicitly use JSON mode
+      mode: 'auto',
       onError: (error: Error) => {
-        console.warn('AI generation error (will attempt repair):', error.message)
+        console.warn('AI generation warning (will attempt repair):', error.message)
       },
     })
-    return object
-  } catch (error) {
-    const err = error as Error
-    
-    // Check if it's a connection error (LLM not configured or unreachable)
-    if (err.message.includes('Failed to fetch') ||
-        err.message.includes('ERR_CONNECTION_TIMED_OUT') ||
-        err.message.includes('ECONNREFUSED') ||
-        err.message.includes('ENOTFOUND')) {
-      console.error('LLM connection error:', err)
-      throw new Error('LLM provider unreachable. Please configure your LLM settings in Settings first. Error: ' + err.message)
+    return object as z.output<Schema>
+  } catch (firstError) {
+    const err = firstError as Error
+    if (isConnectionError(err.message)) {
+      throw new Error('LLM provider unreachable. Please check your settings. Error: ' + err.message)
     }
-    
-    // If repair failed, log the error and throw a user-friendly message
-    console.error('AI object generation failed:', err)
-    throw new Error(`Failed to extract structured data from CV. The LLM response did not match the expected schema. ${err.message}`)
+    // Fall through to text-based fallback for parse / schema errors
+  }
+
+  // Second attempt: generateText + manual JSON extraction
+  // Used for proxy/local models that don't support structured output
+  try {
+    const { text } = await generateText({
+      model,
+      system:
+        (opts.systemPrompt ?? '') +
+        '\n\nIMPORTANT: Respond with ONLY a single valid JSON object. No markdown fences, no explanations, no text before or after the JSON.',
+      prompt: opts.prompt,
+      temperature: 0.1,
+    })
+    const jsonStr = extractJsonFromText(text)
+    const parsed = JSON.parse(jsonStr)
+    const result = opts.schema.safeParse(parsed)
+    if (result.success) return result.data
+    // Zod parse failed — return raw parsed object (schema is lenient with optional fields)
+    return parsed as z.output<Schema>
+  } catch (fallbackError) {
+    const fbErr = fallbackError as Error
+    if (isConnectionError(fbErr.message)) {
+      throw new Error('LLM provider unreachable. Please check your settings. Error: ' + fbErr.message)
+    }
+    throw new Error('Failed to extract profile from CV. The model response could not be parsed. Try a different provider or create your profile manually.')
   }
 }
 
@@ -65,7 +130,7 @@ export async function streamMarkdown(opts: {
     }
     opts.onFinish(full)
   } catch (err) {
-    opts.onError?.(err instanceof Error ? err : new Error(String(err)))
+    opts.onError?.(toFriendlyLLMError(err))
   }
 }
 

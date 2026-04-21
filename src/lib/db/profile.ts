@@ -20,6 +20,31 @@ export async function exportProfile(): Promise<string> {
   return JSON.stringify(profile, null, 2)
 }
 
+export async function hasProfile(): Promise<boolean> {
+  const profile = await getProfile()
+  return !!profile
+}
+
+export async function isProfileComplete(): Promise<boolean> {
+  const profile = await getProfile()
+  if (!profile) return false
+  return (
+    profile.fullName?.trim()?.length > 0 &&
+    profile.email?.trim()?.length > 0 &&
+    profile.skills?.length > 0
+  )
+}
+
+export async function setOnboarded(): Promise<void> {
+  const profile = await getProfile()
+  if (profile) {
+    await db.profile.update(1, {
+      ...profile,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+}
+
 export async function importProfile(json: string): Promise<void> {
   const data = JSON.parse(json) as UserProfile
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

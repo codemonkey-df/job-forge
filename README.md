@@ -1,4 +1,6 @@
-# job-forge
+# Job-Forge
+
+![Extract Data](docs/logo.png)
 
 An intelligent, LLM-powered CV & job-matching assistant. Paste a job offer, get an ATS-optimized tailored resume — all running locally in your browser.
 
@@ -28,6 +30,24 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173).
+
+### Run with Docker
+
+Build the image:
+
+```bash
+docker build -t job-forge .
+```
+
+Run the container:
+
+```bash
+docker run --rm -p 8080:80 job-forge
+```
+
+Open [http://localhost:8080](http://localhost:8080).
+
+This container uses a multi-stage build (`node:20-alpine` -> `nginx:alpine`) and includes SPA routing support so React Router paths work on refresh.
 
 ### First-time setup
 
@@ -99,5 +119,5 @@ npm run lint      # ESLint
 
 ## Notes
 
-- **URL fetching** uses `api.allorigins.win` as a CORS proxy by default. For many job sites this works; for others, paste the description text directly.
+- **URL fetching** uses `api.allorigins.win` as a CORS proxy by default. For many job sites this works; for others, **paste the description text** directly.
 - The PDF library (`@react-pdf/renderer`) adds ~1.5 MB to the bundle — this is expected and normal.
