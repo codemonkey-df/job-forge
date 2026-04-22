@@ -47,6 +47,7 @@ export function CVEditor() {
   const [skills, setSkills] = useState<Skill[]>(profile?.skills ?? [])
   const [pendingSkillName, setPendingSkillName] = useState('')
   const [pendingSkillLevel, setPendingSkillLevel] = useState<Skill['level']>('intermediate')
+  const [pendingSkillCategory, setPendingSkillCategory] = useState('')
   const [experience, setExperience] = useState<WorkExperience[]>(profile?.experience ?? [])
   const [education, setEducation] = useState<Education[]>(profile?.education ?? [])
   const [projects, setProjects] = useState<Project[]>(profile?.projects ?? [])
@@ -80,6 +81,7 @@ export function CVEditor() {
       setSkills(profile.skills)
       setPendingSkillName('')
       setPendingSkillLevel('intermediate')
+      setPendingSkillCategory('')
       setExperience(profile.experience)
       setEducation(profile.education)
       setProjects(profile.projects)
@@ -90,9 +92,14 @@ export function CVEditor() {
   function addPendingSkill(currentSkills: Skill[]): Skill[] {
     const trimmedName = pendingSkillName.trim()
     if (!trimmedName) return currentSkills
-    const nextSkills = [...currentSkills, { name: trimmedName, level: pendingSkillLevel }]
+    const cat = pendingSkillCategory.trim()
+    const nextSkills = [
+      ...currentSkills,
+      { name: trimmedName, level: pendingSkillLevel, ...(cat ? { category: cat } : {}) },
+    ]
     setPendingSkillName('')
     setPendingSkillLevel('intermediate')
+    setPendingSkillCategory('')
     setSkills(nextSkills)
     return nextSkills
   }
@@ -233,8 +240,10 @@ export function CVEditor() {
                 onChange={setSkills}
                 pendingName={pendingSkillName}
                 pendingLevel={pendingSkillLevel}
+                pendingCategory={pendingSkillCategory}
                 onPendingNameChange={setPendingSkillName}
                 onPendingLevelChange={setPendingSkillLevel}
+                onPendingCategoryChange={setPendingSkillCategory}
                 onAddPendingSkill={() => { addPendingSkill(skills) }}
               />
             </CardContent>

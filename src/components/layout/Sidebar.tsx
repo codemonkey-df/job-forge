@@ -30,7 +30,7 @@ export function Sidebar() {
 
   return (
     <aside className={cn(
-      'flex flex-col shrink-0 border-r bg-sidebar h-screen transition-all duration-200 overflow-hidden',
+      'flex flex-col shrink-0 border-r bg-sidebar h-full min-h-0 transition-all duration-200 overflow-hidden',
       collapsed ? 'w-14' : 'w-56',
     )}>
       {/* Logo */}

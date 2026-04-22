@@ -83,6 +83,7 @@ function SkillsStep({ profile, setProfile, errors }: OnboardingStepProps) {
   const [skills, setSkills] = useState<Skill[]>(profile.skills || [])
   const [pendingSkillName, setPendingSkillName] = useState('')
   const [pendingSkillLevel, setPendingSkillLevel] = useState<Skill['level']>('intermediate')
+  const [pendingSkillCategory, setPendingSkillCategory] = useState('')
 
   useEffect(() => {
     setProfile((prev: any) => ({ ...prev, skills }))
@@ -103,14 +104,21 @@ function SkillsStep({ profile, setProfile, errors }: OnboardingStepProps) {
             onChange={setSkills}
             pendingName={pendingSkillName}
             pendingLevel={pendingSkillLevel}
+            pendingCategory={pendingSkillCategory}
             onPendingNameChange={setPendingSkillName}
             onPendingLevelChange={setPendingSkillLevel}
+            onPendingCategoryChange={setPendingSkillCategory}
             onAddPendingSkill={() => {
               const trimmedName = pendingSkillName.trim()
               if (!trimmedName) return
-              setSkills((prev) => [...prev, { name: trimmedName, level: pendingSkillLevel }])
+              const cat = pendingSkillCategory.trim()
+              setSkills((prev) => [
+                ...prev,
+                { name: trimmedName, level: pendingSkillLevel, ...(cat ? { category: cat } : {}) },
+              ])
               setPendingSkillName('')
               setPendingSkillLevel('intermediate')
+              setPendingSkillCategory('')
             }}
           />
         </CardContent>

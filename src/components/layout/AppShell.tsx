@@ -29,13 +29,13 @@ export function AppShell() {
   }, [loadProfile])
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex min-h-0 flex-1 bg-background overflow-hidden">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header title={title} />
         <main className={cn(
-          'flex-1 min-h-0',
-          isJobAnalysis ? 'overflow-hidden flex flex-col' : 'p-6 overflow-auto',
+          'flex-1 min-h-0 min-w-0',
+          isJobAnalysis ? 'overflow-hidden flex flex-col' : 'p-6 overflow-y-auto overflow-x-hidden',
         )}>
           <Outlet />
         </main>

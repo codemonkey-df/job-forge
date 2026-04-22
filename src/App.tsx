@@ -31,7 +31,7 @@ function PageLoader() {
 
 function FullPageLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
       <Loader2 className="size-6 animate-spin text-muted-foreground" />
     </div>
   )
@@ -107,19 +107,23 @@ function AuthGuard() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ThemeManager />
-      <Routes>
-        <Route path="/" element={<Welcome />} />
-        <Route element={<AuthGuard />}>
-          <Route path="/dashboard" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
-          <Route path="/profile" element={<Suspense fallback={<PageLoader />}><Profile /></Suspense>} />
-          <Route path="/jobs/new" element={<Suspense fallback={<PageLoader />}><NewJob /></Suspense>} />
-          <Route path="/jobs/:id" element={<Suspense fallback={<PageLoader />}><JobAnalysis /></Suspense>} />
-          <Route path="/settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <Toaster />
+      <div className="h-full min-h-0 flex flex-col">
+        <ThemeManager />
+        <div className="min-h-0 flex-1 flex flex-col">
+          <Routes>
+            <Route path="/" element={<Welcome />} />
+            <Route element={<AuthGuard />}>
+              <Route path="/dashboard" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
+              <Route path="/profile" element={<Suspense fallback={<PageLoader />}><Profile /></Suspense>} />
+              <Route path="/jobs/new" element={<Suspense fallback={<PageLoader />}><NewJob /></Suspense>} />
+              <Route path="/jobs/:id" element={<Suspense fallback={<PageLoader />}><JobAnalysis /></Suspense>} />
+              <Route path="/settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+        <Toaster />
+      </div>
     </BrowserRouter>
   )
 }
