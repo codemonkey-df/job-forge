@@ -59,24 +59,28 @@ Content Rules:
 - Use strong action verbs (Led, Developed, Implemented, Optimized, Delivered, etc.)
 - Quantify achievements where the profile data allows
 - Experience bullet pattern: action verb + what you built/changed + technologies + measurable outcome
-- Embed primary and secondary job skills naturally inside Work Experience bullets, not only in Technical Skills
-- For backend-targeted jobs, increase explicit backend context in recent roles where truthful (Python backend services, REST APIs, microservices, Docker, AWS, etc.)
 - Include LinkedIn and portfolio links in the header section
 - Include ALL experience entries from the profile, but minimize bullet points for roles with little overlap with the job
 - Skills section: include every mandatory job keyword (with levels per the rules above) plus the nice-to-have skills requested for this CV — do NOT list unrelated profile skills that appear only in the "Skills to EXCLUDE" list in the user prompt (those add noise for this application)
 - Projects: use only real project entries from the applicant profile JSON; follow project order and GitHub link formatting from the user prompt
 
-REPOSITIONING INSTRUCTIONS (CRITICAL):
-- Explicitly emphasize experience and skills that match the job's primary focus and key responsibilities
-- Reposition the user's past experience to highlight alignment with what the employer wants
-- Connect past achievements to the job requirements by emphasizing transferable skills
-- Use the jobFocus and keyResponsibilities to frame the user's experience in context
+WORK EXPERIENCE RULES (CRITICAL — no exceptions):
+- For each work experience entry, rewrite bullets using ONLY facts, technologies, and responsibilities that are already described in that role's original profile data
+- Do NOT inject job description keywords, technologies, or responsibilities into a work experience entry if they are not already mentioned in that role's original description
+- "Repositioning" means: improve clarity, impact, and phrasing of what actually exists — NOT adding new claims
+- If a work experience has no natural overlap with the job description, still include it but enhance the existing bullets for clarity and impact only; do not force-fit job keywords
+- Never add a tool, framework, technology, or responsibility to a role bullet that is not supported by that role's original description text
+- ATS keywords belong in the Technical Skills section; do not manufacture their presence in Work Experience bullets where the experience doesn't support it
+
+REPOSITIONING INSTRUCTIONS:
+- Emphasize the subset of the applicant's real experience that naturally aligns with the job's focus
+- In the Professional Summary, draw connections between the applicant's genuine background and the job's requirements
+- Use language that mirrors the job description's focus, but only where the underlying facts support it
 - Emphasize PRIMARY skills more than SECONDARY or NICE-TO-HAVE skills throughout the resume
-- In the Professional Summary and Work Experience sections, use language that mirrors the job description's focus
 
 OUTPUT INSTRUCTIONS:
 - Start with a strong professional summary that aligns with the jobFocus
-- In Work Experience section, reposition achievements to highlight job-relevant skills
+- In Work Experience section, enhance bullet clarity and impact using only facts already in each role's description; do not add skills or responsibilities that are not already there
 - Use action verbs and quantify results where possible
 - The Technical Skills section MUST include all mandatory skills (levels only where proficiency is known; no level badge for missing mandatory skills)
 - Make the resume compelling for both ATS and human reviewers
@@ -164,12 +168,12 @@ ${rankedProjectsSection}
 ${JSON.stringify(profileData, null, 2)}
 
 CRITICAL INSTRUCTIONS:
-1. Reposition the user's experience to highlight alignment with the jobFocus and key responsibilities
-2. Emphasize PRIMARY skills throughout the resume (summary, experience, skills)
-3. Connect past achievements to what the employer wants by showcasing transferable experience
-4. Use language that mirrors the job description's focus
+1. For each Work Experience entry: rewrite using ONLY the facts, technologies, and responsibilities in that role's original profile description. Never add technologies, outcomes, or responsibilities that aren't already there.
+2. Emphasize PRIMARY skills throughout the resume (summary, experience only where naturally present, skills section).
+3. In the Professional Summary only, draw connections between the applicant's real background and the job. Do not invent claims for specific roles.
+4. Use language that mirrors the job description's focus only where the underlying facts support it.
 5. Generate a complete, ATS-optimized resume in markdown format. Remember: every mandatory skill MUST appear in the Skills section.
-6. Avoid keyword stuffing. Use leading keywords only where supported by real experience evidence from the profile.
+6. Avoid keyword stuffing. Use leading keywords only where supported by real experience evidence from the profile. If a role has no natural overlap, enhance it for clarity — do not force-fit job keywords.
 7. Keep layout single-column and plain text friendly for ATS parsing.
 8. Never duplicate the applicant name and contact block: after the initial H1 name plus contact lines and one-line headline, the next heading must be a real section (Professional Summary or Work Experience as H2), not another name-as-heading with the same email, phone, or LinkedIn repeated
 

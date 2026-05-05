@@ -1,15 +1,87 @@
-import type { JobOffer, JobSkill } from '../../types/job'
-import type { Project, Skill } from '../../types/profile'
+import type { JobOffer, JobSkill, LanguageMatch } from '../../types/job'
+import type { Project, Skill, LanguageProficiency, LanguageLevel } from '../../types/profile'
 import type { SkillPriority } from '@/lib/llm/schemas'
 
+const LANGUAGE_LEVEL_ORDER: LanguageLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'native']
+
+function languageLevelIndex(level: LanguageLevel): number {
+  return LANGUAGE_LEVEL_ORDER.indexOf(level)
+}
+
+export function matchLanguages(
+  requirements: Array<{ language: string; level: LanguageLevel; mandatory: boolean }>,
+  userLanguages: LanguageProficiency[],
+): LanguageMatch[] {
+  const userMap = new Map(userLanguages.map((l) => [l.language.toLowerCase().trim(), l]))
+  return requirements.map((req) => {
+    const userLang = userMap.get(req.language.toLowerCase().trim())
+    const meetsRequirement = userLang
+      ? languageLevelIndex(userLang.level) >= languageLevelIndex(req.level)
+      : false
+    return {
+      language: req.language,
+      requiredLevel: req.level,
+      mandatory: req.mandatory,
+      userHasLanguage: !!userLang,
+      userLevel: userLang?.level,
+      meetsRequirement,
+    }
+  })
+}
+
+function extractParentheticalAcronym(skillName: string): string | null {
+  const match = skillName.match(/\(\s*([A-Za-z]{2,10})\s*\)/)
+  return match ? match[1].toLowerCase() : null
+}
+
 /**
- * Substring fuzzy match when both tokens are at least 3 chars (same rules as {@link matchSkills}).
+ * Fuzzy match with substring, plural normalization, and acronym extraction.
+ * - Both tokens must be at least 3 chars to avoid short-name collisions ("Go" ⊂ "Django").
+ * - Strips trailing plural 's' before retrying ("LLMs" → "LLM").
+ * - Extracts acronyms from "Full Name ( ABC )" notation and matches job skill tokens against them
+ *   (e.g. "LLM pipelines" token "llm" matches "Large Language Model ( LLM )").
  */
 export function fuzzyTokenMatch(a: string, b: string): boolean {
   const uKey = a.toLowerCase().trim()
   const key = b.toLowerCase().trim()
   if (uKey.length < 3 || key.length < 3) return false
-  return uKey.includes(key) || key.includes(uKey)
+
+  // Direct substring match
+  if (uKey.includes(key) || key.includes(uKey)) return true
+
+  // Plural normalization: strip trailing 's' and retry
+  const uNorm = uKey.endsWith('s') ? uKey.slice(0, -1) : uKey
+  const kNorm = key.endsWith('s') ? key.slice(0, -1) : key
+  if ((uNorm !== uKey || kNorm !== key) && uNorm.length >= 3 && kNorm.length >= 3) {
+    if (uKey.includes(kNorm) || kNorm.includes(uKey)) return true
+    if (uNorm.includes(key) || key.includes(uNorm)) return true
+    if (uNorm.includes(kNorm) || kNorm.includes(uNorm)) return true
+  }
+
+  // Acronym matching: extract ( ABC ) notation and match against it
+  // e.g. user "Large Language Model ( LLM )" has acronym "llm"
+  const aAcronym = extractParentheticalAcronym(a)
+  const bAcronym = extractParentheticalAcronym(b)
+
+  if (aAcronym && aAcronym.length >= 3) {
+    if (key === aAcronym || kNorm === aAcronym) return true
+    // Token-level: "LLM pipelines" → token "llm" matches acronym "llm"
+    const bTokens = key.split(/[\s\-\/,()\[\]]+/).filter((t) => t.length >= 3)
+    for (const bt of bTokens) {
+      const btNorm = bt.endsWith('s') ? bt.slice(0, -1) : bt
+      if (bt === aAcronym || btNorm === aAcronym) return true
+    }
+  }
+  if (bAcronym && bAcronym.length >= 3) {
+    if (uKey === bAcronym || uNorm === bAcronym) return true
+    const aTokens = uKey.split(/[\s\-\/,()\[\]]+/).filter((t) => t.length >= 3)
+    for (const at of aTokens) {
+      const atNorm = at.endsWith('s') ? at.slice(0, -1) : at
+      if (at === bAcronym || atNorm === bAcronym) return true
+    }
+  }
+
+  return false
 }
 
 export interface JobSkillWithContext extends JobSkill {

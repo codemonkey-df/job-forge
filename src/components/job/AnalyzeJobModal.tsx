@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { extractStructured } from '@/lib/llm/client'
 import { SkillExtractionResultSchema } from '@/lib/llm/schemas'
 import { skillExtractionSystem, buildSkillExtractionPrompt } from '@/lib/llm/prompts/skillExtraction'
-import { matchSkills } from '@/lib/utils/skillMatcher'
+import { matchSkills, matchLanguages } from '@/lib/utils/skillMatcher'
 import { fetchJobDescription } from '@/lib/utils/jobParser'
 import { buildAnalysisInsights } from '@/lib/utils/analysisInsights'
 import { computeSkillsSignature } from '@/lib/utils/skillsSignature'
@@ -80,6 +80,9 @@ export function AnalyzeJobModal({ open, onOpenChange, onSuccess }: Props) {
       const matchedSkills = matchSkills(allExtracted, profile?.skills ?? [])
       const mandatory: JobSkill[] = matchedSkills.filter((s) => s.mandatory)
       const niceToHave: JobSkill[] = matchedSkills.filter((s) => !s.mandatory)
+      const languageRequirements = extraction.languageRequirements?.length
+        ? matchLanguages(extraction.languageRequirements, profile?.languages ?? [])
+        : undefined
       const leadingKeywords = (extraction.leadingKeywords ?? []).filter(
         (item): item is { keyword: string; source?: 'skill' | 'responsibility' | 'domain'; importance?: 'high' | 'medium' | 'low' } =>
           typeof item.keyword === 'string' && item.keyword.trim().length > 0,
@@ -95,6 +98,7 @@ export function AnalyzeJobModal({ open, onOpenChange, onSuccess }: Props) {
         primarySkills: extraction.primarySkills,
         mandatorySkills: mandatory,
         niceToHaveSkills: niceToHave,
+        languageRequirements,
         analysisInsights: buildAnalysisInsights(
           {
             mandatorySkills: mandatory,

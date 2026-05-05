@@ -30,6 +30,13 @@ export const SkillExtractionResultSchema = z.object({
     }),
   ).optional(),
   summary: z.string().optional(),
+  languageRequirements: z.array(
+    z.object({
+      language: z.string(),
+      level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'native']),
+      mandatory: z.boolean(),
+    }),
+  ).optional(),
 })
 
 export type SkillExtractionResult = z.infer<typeof SkillExtractionResultSchema>
@@ -50,6 +57,12 @@ export const UserProfileDraftSchema = z.object({
       name: z.string(),
       level: z.enum(['basic', 'intermediate', 'advanced', 'expert']),
       category: z.string().optional(),
+    }),
+  ).optional(),
+  languages: z.array(
+    z.object({
+      language: z.string(),
+      level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'native']),
     }),
   ).optional(),
   experience: z.array(

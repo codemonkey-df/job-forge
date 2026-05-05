@@ -32,6 +32,9 @@ You are a precise CV parser. Your only job is to extract structured data from th
   "skills": [
     { "name": string, "level": "basic"|"intermediate"|"advanced"|"expert", "category": string }
   ],
+  "languages": [
+    { "language": string, "level": "A1"|"A2"|"B1"|"B2"|"C1"|"C2"|"native" }
+  ],
   "experience": [
     { "company": string, "title": string, "startDate": string, "endDate": string, "description": string }
   ],
@@ -73,6 +76,14 @@ You are a precise CV parser. Your only job is to extract structured data from th
 | \`"intermediate"\` | Used in at least one project or role; 1–2 years implied                  |
 | \`"advanced"\`     | Central to multiple roles or projects; 3–5 years implied; lead-level use |
 | \`"expert"\`       | 6+ years implied, or explicitly described as expert/author/teacher       |
+
+### Languages
+- Extract all languages explicitly mentioned in the CV (e.g., in a "Languages" section or within the text).
+- Map proficiency to CEFR levels: A1 (beginner) → A2 → B1 (intermediate) → B2 → C1 (advanced) → C2 (mastery) → native.
+- If the CV says "native", "mother tongue", or lists the language as their native language, use \`"native"\`.
+- If a CEFR code is stated verbatim (A1–C2), use it directly.
+- If a descriptor is used, map it: beginner→A1, elementary→A2, intermediate→B1, upper-intermediate→B2, advanced→C1, proficient→C2.
+- Do not infer languages from location or name — only extract what is explicitly stated.
 
 ## FEW-SHOT EXAMPLES
 

@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { SkillsManager } from '@/components/profile/SkillsManager'
+import { LanguagesManager } from '@/components/profile/LanguagesManager'
 import { GitHubImport } from '@/components/profile/GitHubImport'
 import { ExperienceEditor } from './ExperienceEditor'
 import { useProfileStore } from '@/store/profileStore'
@@ -19,7 +20,7 @@ import { extractTextFromPDF } from '@/lib/utils/cvUploader'
 import { extractStructured } from '@/lib/llm/client'
 import { UserProfileDraftSchema } from '@/lib/llm/schemas'
 import { profileExtractionSystem } from '@/lib/llm/prompts/profileExtraction'
-import type { Skill, WorkExperience, Education, Project } from '@/types/profile'
+import type { Skill, WorkExperience, Education, Project, LanguageProficiency, LanguageLevel } from '@/types/profile'
 
 const schema = z.object({
   fullName: z.string().min(1, 'Name is required'),
@@ -48,6 +49,9 @@ export function CVEditor() {
   const [pendingSkillName, setPendingSkillName] = useState('')
   const [pendingSkillLevel, setPendingSkillLevel] = useState<Skill['level']>('intermediate')
   const [pendingSkillCategory, setPendingSkillCategory] = useState('')
+  const [languages, setLanguages] = useState<LanguageProficiency[]>(profile?.languages ?? [])
+  const [pendingLanguage, setPendingLanguage] = useState('')
+  const [pendingLanguageLevel, setPendingLanguageLevel] = useState<LanguageLevel>('B2')
   const [experience, setExperience] = useState<WorkExperience[]>(profile?.experience ?? [])
   const [education, setEducation] = useState<Education[]>(profile?.education ?? [])
   const [projects, setProjects] = useState<Project[]>(profile?.projects ?? [])
@@ -82,12 +86,25 @@ export function CVEditor() {
       setPendingSkillName('')
       setPendingSkillLevel('intermediate')
       setPendingSkillCategory('')
+      setLanguages(profile.languages ?? [])
+      setPendingLanguage('')
+      setPendingLanguageLevel('B2')
       setExperience(profile.experience)
       setEducation(profile.education)
       setProjects(profile.projects)
       setGithubUsername(profile.githubUsername ?? '')
     }
   }, [profile, reset])
+
+  function addPendingLanguage(currentLanguages: LanguageProficiency[]): LanguageProficiency[] {
+    const trimmed = pendingLanguage.trim()
+    if (!trimmed) return currentLanguages
+    const next = [...currentLanguages, { language: trimmed, level: pendingLanguageLevel }]
+    setPendingLanguage('')
+    setPendingLanguageLevel('B2')
+    setLanguages(next)
+    return next
+  }
 
   function addPendingSkill(currentSkills: Skill[]): Skill[] {
     const trimmedName = pendingSkillName.trim()
@@ -106,9 +123,11 @@ export function CVEditor() {
 
   async function onSubmit(data: FormValues) {
     const skillsToSave = addPendingSkill(skills)
+    const languagesToSave = addPendingLanguage(languages)
     await saveProfile({
       ...data,
       skills: skillsToSave,
+      languages: languagesToSave,
       experience,
       education,
       projects,
@@ -147,6 +166,7 @@ export function CVEditor() {
       if (draft.location) reset((prev) => ({ ...prev, location: draft.location ?? prev.location }))
       if (draft.summary) reset((prev) => ({ ...prev, summary: draft.summary ?? prev.summary }))
       if (draft.skills?.length) setSkills(draft.skills)
+      if (draft.languages?.length) setLanguages(draft.languages)
       if (draft.experience?.length) setExperience(draft.experience)
       if (draft.education?.length) setEducation(draft.education)
       if (draft.projects?.length) setProjects(draft.projects)
@@ -234,18 +254,36 @@ export function CVEditor() {
 
         <TabsContent value="skills">
           <Card>
-            <CardContent className="pt-6">
-              <SkillsManager
-                skills={skills}
-                onChange={setSkills}
-                pendingName={pendingSkillName}
-                pendingLevel={pendingSkillLevel}
-                pendingCategory={pendingSkillCategory}
-                onPendingNameChange={setPendingSkillName}
-                onPendingLevelChange={setPendingSkillLevel}
-                onPendingCategoryChange={setPendingSkillCategory}
-                onAddPendingSkill={() => { addPendingSkill(skills) }}
-              />
+            <CardContent className="pt-6 space-y-8">
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Technical Skills</h3>
+                <SkillsManager
+                  skills={skills}
+                  onChange={setSkills}
+                  pendingName={pendingSkillName}
+                  pendingLevel={pendingSkillLevel}
+                  pendingCategory={pendingSkillCategory}
+                  onPendingNameChange={setPendingSkillName}
+                  onPendingLevelChange={setPendingSkillLevel}
+                  onPendingCategoryChange={setPendingSkillCategory}
+                  onAddPendingSkill={() => { addPendingSkill(skills) }}
+                />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Language Proficiency</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  CEFR scale: A1 (beginner) → B2 (upper-intermediate) → C2 (mastery) → Native
+                </p>
+                <LanguagesManager
+                  languages={languages}
+                  onChange={setLanguages}
+                  pendingLanguage={pendingLanguage}
+                  pendingLevel={pendingLanguageLevel}
+                  onPendingLanguageChange={setPendingLanguage}
+                  onPendingLevelChange={setPendingLanguageLevel}
+                  onAddPendingLanguage={() => { addPendingLanguage(languages) }}
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

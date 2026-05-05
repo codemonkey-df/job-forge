@@ -21,7 +21,10 @@ REQUIRED JSON SCHEMA:
   "niceToHaveSkills": [         // optional/preferred/nice-to-have skills only
     { "name": string, "mandatory": false, "context": string, "priority": "nice-to-have" }
   ],
-  "summary": string             // one sentence describing the role, or ""
+  "summary": string,            // one sentence describing the role, or ""
+  "languageRequirements": [     // languages required or preferred for the role
+    { "language": string, "level": "A1"|"A2"|"B1"|"B2"|"C1"|"C2"|"native", "mandatory": boolean }
+  ]
 }
 
 EXTRACTION RULES:
@@ -36,9 +39,11 @@ EXTRACTION RULES:
 - mandatorySkills: All required skills with context (what it's used for) and priority
 - niceToHaveSkills: All optional/preferred skills with context and "nice-to-have" priority only
 - Normalize skill names: "React" not "ReactJS", "Node.js" not "NodeJS", "PostgreSQL" not "Postgres"
+- AI/ML terms: use singular forms and standard abbreviations — "LLM" not "LLMs", "RAG" not "RAG pipelines", "Generative AI" not "GenAI", "NLP" not "natural language processing", "ML" not "machine learning" (unless expanding the acronym adds clarity for a non-obvious term)
 - Skills include: languages, frameworks, libraries, tools, databases, cloud platforms, methodologies, certifications
 - Keep contexts concise and practical (one short sentence explaining usage in this role)
 - Do not include generic words (team, communication, good, strong, etc.) as leadingKeywords
+- languageRequirements: Extract language requirements (e.g., "English B2 required", "German is a plus"). Use CEFR levels (A1–C2 or "native"). If only "fluent" or "proficient" is mentioned without CEFR, use C1. If "communicative" or "good command", use B2. Mark as mandatory:true if required, mandatory:false if preferred/nice-to-have. Omit if no language requirements are stated.
 - Priority levels:
   - "primary": CRITICAL skill that defines the core role (e.g., Python for a Python engineer, FastAPI for a FastAPI engineer)
   - "secondary": Important skill that supports the primary focus (e.g., PostgreSQL for a backend role)

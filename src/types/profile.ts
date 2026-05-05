@@ -1,5 +1,12 @@
 export type SkillLevel = 'basic' | 'intermediate' | 'advanced' | 'expert'
 
+export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | 'native'
+
+export interface LanguageProficiency {
+  language: string
+  level: LanguageLevel
+}
+
 export interface Skill {
   name: string
   level: SkillLevel
@@ -42,6 +49,7 @@ export interface UserProfile {
   githubUsername?: string
   summary?: string
   skills: Skill[]
+  languages?: LanguageProficiency[]
   experience: WorkExperience[]
   education: Education[]
   projects: Project[]

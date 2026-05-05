@@ -1,9 +1,10 @@
-import { useId, useMemo, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Check, Plus, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { SKILL_CATEGORY_PRESETS } from '@/lib/profile/skillCategoryPresets'
 import {
@@ -20,6 +21,100 @@ const levels: SkillLevel[] = ['basic', 'intermediate', 'advanced', 'expert']
 
 const CATEGORY_FILTER_ALL = '__all__'
 const CATEGORY_FILTER_UNCATEGORIZED = '__uncategorized__'
+const CATEGORY_NEW = '__new__'
+
+interface CategorySelectProps {
+  value: string
+  onChange: (value: string) => void
+  profileCategories: string[]
+  className?: string
+}
+
+function CategorySelect({ value, onChange, profileCategories, className }: CategorySelectProps) {
+  const [creating, setCreating] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const customCategories = profileCategories.filter((c) => !SKILL_CATEGORY_PRESETS.includes(c))
+
+  function commit() {
+    const trimmed = draft.trim()
+    if (trimmed) onChange(trimmed)
+    setCreating(false)
+    setDraft('')
+  }
+
+  function cancel() {
+    setCreating(false)
+    setDraft('')
+  }
+
+  if (creating) {
+    return (
+      <div className={`flex items-center gap-1 ${className ?? ''}`}>
+        <Input
+          ref={inputRef}
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit() }
+            if (e.key === 'Escape') { e.preventDefault(); cancel() }
+          }}
+          placeholder="New category name…"
+          className="h-9 min-w-0 flex-1"
+        />
+        <Button type="button" size="icon" variant="ghost" className="size-9 shrink-0" onClick={commit} aria-label="Confirm category">
+          <Check className="size-4" />
+        </Button>
+        <Button type="button" size="icon" variant="ghost" className="size-9 shrink-0" onClick={cancel} aria-label="Cancel">
+          <X className="size-4" />
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <Select
+      value={value || '__none__'}
+      onValueChange={(v) => {
+        if (v === CATEGORY_NEW) {
+          setCreating(true)
+        } else {
+          onChange(v === '__none__' ? '' : v)
+        }
+      }}
+    >
+      <SelectTrigger className={`h-9 ${className ?? ''}`}>
+        <SelectValue placeholder="Category" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none__">
+          <span className="text-muted-foreground">None</span>
+        </SelectItem>
+        <Separator className="my-1" />
+        {SKILL_CATEGORY_PRESETS.map((c) => (
+          <SelectItem key={c} value={c}>{c}</SelectItem>
+        ))}
+        {customCategories.length > 0 && (
+          <>
+            <Separator className="my-1" />
+            {customCategories.map((c) => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </>
+        )}
+        <Separator className="my-1" />
+        <SelectItem value={CATEGORY_NEW}>
+          <span className="flex items-center gap-1.5">
+            <Plus className="size-3.5" />
+            Create new category…
+          </span>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
 
 interface Props {
   skills: Skill[]
@@ -60,7 +155,6 @@ export function SkillsManager({
   onPendingCategoryChange,
   onAddPendingSkill,
 }: Props) {
-  const datalistId = useId()
   const [searchQuery, setSearchQuery] = useState('')
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
@@ -110,13 +204,11 @@ export function SkillsManager({
           className="min-w-[8rem] flex-1"
           aria-label="Skill name"
         />
-        <Input
+        <CategorySelect
           value={storedCategory(skill)}
-          onChange={(e) => updateCategory(index, e.target.value)}
-          placeholder="Category"
-          className="w-40 min-w-[6rem]"
-          list={datalistId}
-          aria-label="Skill category"
+          onChange={(v) => updateCategory(index, v)}
+          profileCategories={categoriesInProfile}
+          className="w-44 shrink-0"
         />
         <Select value={skill.level} onValueChange={(v) => updateLevel(index, v as SkillLevel)}>
           <SelectTrigger className="w-36 shrink-0">
@@ -139,11 +231,6 @@ export function SkillsManager({
 
   return (
     <div className="space-y-4">
-      <datalist id={datalistId}>
-        {SKILL_CATEGORY_PRESETS.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
 
       {skills.length > 0 && (
         <div className="flex flex-col gap-4 rounded-lg border bg-muted/30 p-4">
@@ -256,13 +343,11 @@ export function SkillsManager({
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), onAddPendingSkill())}
           aria-label="New skill name"
         />
-        <Input
+        <CategorySelect
           value={pendingCategory}
-          onChange={(e) => onPendingCategoryChange(e.target.value)}
-          placeholder="Category"
-          className="w-40 min-w-[6rem]"
-          list={datalistId}
-          aria-label="New skill category"
+          onChange={onPendingCategoryChange}
+          profileCategories={categoriesInProfile}
+          className="w-44 shrink-0"
         />
         <Select value={pendingLevel} onValueChange={(v) => onPendingLevelChange(v as SkillLevel)}>
           <SelectTrigger className="w-36 shrink-0">

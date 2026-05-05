@@ -1,5 +1,14 @@
-import type { SkillLevel } from './profile'
+import type { SkillLevel, LanguageLevel } from './profile'
 import type { SkillPriority } from '@/lib/llm/schemas'
+
+export interface LanguageMatch {
+  language: string
+  requiredLevel: LanguageLevel
+  mandatory: boolean
+  userHasLanguage: boolean
+  userLevel?: LanguageLevel
+  meetsRequirement: boolean
+}
 
 export type ApplicationStatus =
   | 'bookmarked'
@@ -105,6 +114,7 @@ export interface JobOffer {
   analysisInsights?: AnalysisInsights
   analysisSkillsHash?: string
   analysisLastComputedAt?: string
+  languageRequirements?: LanguageMatch[]
   /** User decisions on fuzzy alias matches (job skill name → confirm or reject) */
   skillAliasOverrides?: Record<string, 'confirmed' | 'rejected'>
   generatedCV?: string

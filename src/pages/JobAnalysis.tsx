@@ -13,6 +13,7 @@ import {
   computeJobProfileMatchPercentage,
   computeExcludedUserSkills,
   matchSkills,
+  matchLanguages,
   rankProjectsByJobRelevance,
 } from '@/lib/utils/skillMatcher'
 import { useToast } from '@/hooks/use-toast'
@@ -181,6 +182,7 @@ export default function JobAnalysis() {
 
     const jobId = job.id
     const currentSkills = profile?.skills ?? []
+    const currentLanguages = profile?.languages ?? []
     const currentSkillsHash = computeSkillsSignature(currentSkills)
     const isStale = job.analysisSkillsHash !== currentSkillsHash
     if (!isStale) return
@@ -229,9 +231,20 @@ export default function JobAnalysis() {
         )
 
         const now = new Date().toISOString()
+        const rematcedLanguages = job.languageRequirements?.length
+          ? matchLanguages(
+              job.languageRequirements.map((l) => ({
+                language: l.language,
+                level: l.requiredLevel,
+                mandatory: l.mandatory,
+              })),
+              currentLanguages,
+            )
+          : undefined
         const updates: Partial<JobOffer> = {
           mandatorySkills: mandatoryRaw,
           niceToHaveSkills: niceToHaveRaw,
+          languageRequirements: rematcedLanguages,
           analysisInsights: nextInsights,
           analysisSkillsHash: currentSkillsHash,
           analysisLastComputedAt: now,
@@ -544,6 +557,53 @@ export default function JobAnalysis() {
               </div>
             </div>
           </section>
+
+          {job.languageRequirements && job.languageRequirements.length > 0 && (
+            <section className="rounded-lg border bg-card p-4 space-y-3">
+              <p className="text-sm font-semibold">Language Requirements</p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {job.languageRequirements.map((lang) => (
+                  <div
+                    key={lang.language}
+                    className={cn(
+                      'rounded-md border p-2.5',
+                      lang.meetsRequirement
+                        ? 'bg-emerald-500/10 border-emerald-500/30'
+                        : lang.mandatory
+                          ? 'bg-destructive/10 border-destructive/30'
+                          : 'bg-amber-500/10 border-amber-500/30',
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{lang.language}</p>
+                      <span className={cn(
+                        'text-[10px] px-2 py-0.5 rounded-full border font-medium',
+                        lang.mandatory
+                          ? 'bg-destructive/10 text-destructive border-destructive/20'
+                          : 'bg-muted text-muted-foreground border-border',
+                      )}>
+                        {lang.mandatory ? 'Required' : 'Preferred'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Required: {lang.requiredLevel === 'native' ? 'Native' : lang.requiredLevel}
+                      {lang.userLevel && ` · Your level: ${lang.userLevel === 'native' ? 'Native' : lang.userLevel}`}
+                    </p>
+                    <p className={cn(
+                      'text-xs mt-1 font-medium',
+                      lang.meetsRequirement ? 'text-emerald-700 dark:text-emerald-300' : 'text-destructive',
+                    )}>
+                      {lang.meetsRequirement
+                        ? 'Meets requirement'
+                        : lang.userHasLanguage
+                          ? 'Level below requirement'
+                          : 'Not in profile'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {missingMandatory.length > 0 && (
             <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-2">
