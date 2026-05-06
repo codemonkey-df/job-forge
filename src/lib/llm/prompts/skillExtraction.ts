@@ -27,6 +27,12 @@ REQUIRED JSON SCHEMA:
   ]
 }
 
+LANGUAGE HANDLING:
+- If the job description is NOT in English, translate all extracted content to English before populating the JSON fields.
+- All output fields (jobTitle, jobFocus, keyResponsibilities, skill names, contexts, summary, etc.) MUST be in English.
+- Skill names must use their standard English form (e.g. "Python", "Machine Learning", not translated equivalents).
+- Language requirements (languageRequirements[].language) should use the English name of the language (e.g. "Polish", "German").
+
 EXTRACTION RULES:
 - Analyze the FULL job description to determine which skills are truly required vs nice-to-have
 - Don't just rely on labeled sections like "Required" or "Nice to have" - consider the context
@@ -80,5 +86,5 @@ EXAMPLE OUTPUT:
 {"companyName":"DataCorp","jobTitle":"Senior FastAPI Backend Engineer","jobFocus":"FastAPI backend engineer","keyResponsibilities":["Build REST APIs using FastAPI","Work with large datasets in PostgreSQL","Deploy services with Docker","Experience with microservices architecture"],"primarySkills":["FastAPI"],"leadingKeywords":[{"keyword":"FastAPI","source":"skill","importance":"high"},{"keyword":"REST APIs","source":"responsibility","importance":"high"},{"keyword":"microservices","source":"domain","importance":"medium"}],"mandatorySkills":[{"name":"Python","mandatory":true,"context":"Primary language for building FastAPI backend services","priority":"primary"},{"name":"FastAPI","mandatory":true,"context":"Core framework for building REST APIs","priority":"primary"},{"name":"PostgreSQL","mandatory":true,"context":"Database for storing and querying large datasets","priority":"secondary"},{"name":"Docker","mandatory":true,"context":"Containerization for deployment and environment consistency","priority":"secondary"}],"niceToHaveSkills":[{"name":"Kubernetes","mandatory":false,"context":"Orchestration for scaling Docker containers","priority":"nice-to-have"},{"name":"AWS","mandatory":false,"context":"Cloud platform for hosting infrastructure","priority":"nice-to-have"}],"summary":"Senior FastAPI backend engineering role at DataCorp focused on building REST APIs with PostgreSQL database."}`
 
 export function buildSkillExtractionPrompt(jobDescription: string): string {
-  return `Extract the skills, company name, and job title from the following job description:\n\n${jobDescription}`
+  return `Extract the skills, company name, and job title from the following job description. If the description is not in English, translate all extracted fields to English first.\n\n${jobDescription}`
 }

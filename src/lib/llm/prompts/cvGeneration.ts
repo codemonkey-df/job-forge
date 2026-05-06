@@ -7,7 +7,7 @@ ATS Rules (STRICTLY follow):
 - If the user needs manual PDF page breaks, prefer the literal token <-new_page-> (HTML comment pagebreak is equivalent); do not add breaks unless asked
 - Document header (exactly once at the very top): a single H1 line with full name, then 1–3 contact lines (email, phone, links). Do NOT add a second header block as an H2 with the same name that only repeats contact details in pipe-separated form — that duplicates the top header and hurts readability
 - After the H1 name + contact lines, add a one-line role headline that mirrors the exact job title wording from the posting when available (e.g. "Senior Python Backend Engineer | FastAPI | AWS | Docker"); use primary skills/domain focus; do NOT repeat this headline elsewhere
-- Standard section headings after the header/headline: Professional Summary, Technical Skills, Work Experience, Education, Projects — each as H2 section headings only
+- Standard section headings after the header/headline: Professional Summary, Technical Skills, Language Proficiency, Work Experience, Education, Projects — each as H2 section headings only
 - Use ## for section headings, ### for sub-headings (company/institution names)
 - Dates in format: MMM YYYY (e.g. Jan 2022)
 - No headers or footers
@@ -52,6 +52,24 @@ Skills Section FORMAT (use EXACTLY this structure):
 - Remove duplicates and normalize awkward variants (e.g. prefer "REST APIs" over "REST API", avoid duplicated "FastAPI" entries)
 - In AI/ML, prefer concrete tools from profile evidence over vague labels (e.g. list specific frameworks/platforms instead of generic "Big Data")
 
+Language Proficiency Section Rules:
+- Always include a ## Language Proficiency section immediately after ## Technical Skills
+- List ONLY languages from the applicant profile's \`languages\` array — never invent languages
+- If the profile has no languages, omit the section entirely
+- Format each language as: \`- Language: Level\` where Level is the human-readable label:
+  - native → Native
+  - C2 → Proficient (C2)
+  - C1 → Advanced (C1)
+  - B2 → Upper-Intermediate (B2)
+  - B1 → Intermediate (B1)
+  - A2 → Elementary (A2)
+  - A1 → Beginner (A1)
+- Example:
+## Language Proficiency
+- Polish: Native
+- English: Advanced (C1)
+- German: Intermediate (B1)
+
 Content Rules:
 - Do NOT invent work experience, projects, or achievements the applicant doesn't have
 - Tailor the summary and experience descriptions to emphasize the applicant's relevant skills
@@ -59,7 +77,7 @@ Content Rules:
 - Use strong action verbs (Led, Developed, Implemented, Optimized, Delivered, etc.)
 - Quantify achievements where the profile data allows
 - Experience bullet pattern: action verb + what you built/changed + technologies + measurable outcome
-- Include LinkedIn and portfolio links in the header section
+- MANDATORY: Include the applicant's LinkedIn URL (from \`linkedinUrl\`) and portfolio URL (from \`portfolioUrl\`) as clickable markdown links in the contact lines of the header whenever those fields are present in the profile — never omit them
 - Include ALL experience entries from the profile, but minimize bullet points for roles with little overlap with the job
 - Skills section: include every mandatory job keyword (with levels per the rules above) plus the nice-to-have skills requested for this CV — do NOT list unrelated profile skills that appear only in the "Skills to EXCLUDE" list in the user prompt (those add noise for this application)
 - Projects: use only real project entries from the applicant profile JSON; follow project order and GitHub link formatting from the user prompt
@@ -176,6 +194,8 @@ CRITICAL INSTRUCTIONS:
 6. Avoid keyword stuffing. Use leading keywords only where supported by real experience evidence from the profile. If a role has no natural overlap, enhance it for clarity — do not force-fit job keywords.
 7. Keep layout single-column and plain text friendly for ATS parsing.
 8. Never duplicate the applicant name and contact block: after the initial H1 name plus contact lines and one-line headline, the next heading must be a real section (Professional Summary or Work Experience as H2), not another name-as-heading with the same email, phone, or LinkedIn repeated
+10. MANDATORY HEADER LINKS: If the applicant profile contains \`linkedinUrl\`, render it as a markdown link (e.g. [LinkedIn](url)) in the contact lines. If it contains \`portfolioUrl\`, render it as a markdown link (e.g. [Portfolio](url)) in the contact lines. Never omit these links when the fields are present.
+9. Include a ## Language Proficiency section between ## Technical Skills and ## Work Experience, using only languages listed in the applicant profile's \`languages\` array with their proper level labels. If the profile has no languages, omit the section.
 
 Projects Section:
 - If profile projects are missing/empty: extract 1-3 notable technical deliverables from Work Experience descriptions and present them as mini project entries
